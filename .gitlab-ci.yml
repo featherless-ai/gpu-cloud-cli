@@ -7,11 +7,11 @@ stages:
   timeout: 20 minutes
   interruptible: true
   tags:
-    - sd-sfo3-sysops-01
+    - platform
   variables:
     COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
   # No cache: the runner has no shared cache server, so a saved store never
-  # reached the next pod and saving it cost 20-25s per job.
+  # reached the next job's runner session and saving it cost 20-25s per job.
   before_script:
     # The version script's tests drive a scratch git repository.
     - apk add --no-cache git
@@ -34,9 +34,9 @@ typecheck:
 unit-tests:
   extends: .node-test
   before_script:
-    # sshPipeService tests check generated keys with ssh-keygen; the CLI
-    # completion tests run the generated scripts in bash and zsh.
-    - apk add --no-cache openssh-client bash zsh
+    # The version tests drive a scratch git repository; the completion
+    # tests run the generated scripts in bash and zsh.
+    - apk add --no-cache git bash zsh
     - !reference [.node-test, before_script]
   script:
     - pnpm test --reporter=default --reporter=junit --outputFile=junit.xml
