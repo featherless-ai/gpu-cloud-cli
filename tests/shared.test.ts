@@ -1,0 +1,425 @@
+import {
+  afterEach, describe, expect, it, vi,
+} from 'vitest';
+import { Command } from 'commander';
+import {
+  assertInstanceName,
+  findInstance,
+  parsePorts,
+  parseRepeatable,
+  randomInstanceName,
+  requireDeletion,
+  resolveCompute,
+  resolveImage,
+  resolveInstanceId,
+  resolveVolume,
+  toEnvironment,
+  validateMounts,
+} from '../src/commands/shared';
+import { newContent } from '../src/commands/instance/logs';
+import { CliContext } from '../src/context';
+import { CliError } from '../src/error';
+import type { PriceRate, CatalogTemplate } from '../src/types/pricing';
+import type { NetworkVolumeDto } from '../src/types/volume';
+import type { RegistryCredential } from '../src/types/instance';
+import type { InstanceDto } from '../src/types/instance';
+import type { CloudClient } from '../src/clients/cloud';
+
+function ctx(mode: 'plain' | 'interactive' = 'plain'): CliContext {
+  const root = new Command();
+  root.option('--json');
+  root.option('--non-interactive');
+
+  if (mode === 'plain') {
+    root.setOptionValue('nonInteractive', true);
+  }
+
+  return new CliContext(root);
+}
+
+function gpuRate(sku: string, gpuCount: number, gpuModel: string): PriceRate {
+  return {
+    sku,
+    displayName: `${gpuCount}x ${gpuModel}`,
+    resourceType: 'instance.gpu',
+    unit: 'gpu_hour',
+    gpuCount,
+    unitPriceMicros: '1000000',
+    compareAtUnitPriceMicros: null,
+    currency: 'usd',
+    effectiveAt: '2026-01-01T00:00:00Z',
+    expiresAt: null,
+    resources: { gpuModel, gpuMemoryGiB: 192, cpuCores: 16, memoryGiB: 256 },
+  };
+}
+
+function cpuRate(sku: string, cpuCores: number): PriceRate {
+  return {
+    sku,
+    displayName: `${cpuCores} vCPU`,
+    resourceType: 'instance.cpu',
+    unit: 'vcpu_hour',
+    gpuCount: null,
+    unitPriceMicros: '30000',
+    compareAtUnitPriceMicros: null,
+    currency: 'usd',
+    effectiveAt: '2026-01-01T00:00:00Z',
+    expiresAt: null,
+    resources: { gpuModel: null, gpuMemoryGiB: null, cpuCores, memoryGiB: 32 },
+  };
+}
+
+const PRICES: PriceRate[] = [
+  gpuRate('gpu.mi325x.1x', 1, 'MI325X'),
+  gpuRate('gpu.mi325x.2x', 2, 'MI325X'),
+  gpuRate('gpu.h100.1x', 1, 'H100'),
+  cpuRate('cpu.small', 4),
+  cpuRate('cpu.large', 16),
+];
+
+const TEMPLATES: CatalogTemplate[] = [{
+  id: 't1',
+  name: 'PyTorch',
+  description: '',
+  imageRepository: null,
+  enabled: true,
+  computeTypes: ['gpu'],
+  version: {
+    id: '11111111-1111-4111-8111-111111111111',
+    version: '2.4.1',
+    tag: 'latest',
+    state: 'published',
+    image: 'ghcr.io/featherless/pytorch:2.4.1',
+    startupCommand: '',
+  },
+}];
+
+const CREDENTIALS: RegistryCredential[] = [{
+  id: '22222222-2222-4222-8222-222222222222',
+  name: 'Private Hub',
+  registry: 'registry.example.com',
+}];
+
+function volume(overrides: Partial<NetworkVolumeDto> = {}): NetworkVolumeDto {
+  return {
+    id: '33333333-3333-4333-8333-333333333333',
+    name: 'data',
+    capacityGiB: 100,
+    state: 'available',
+    attachments: [],
+    pricing: {
+      unitPriceMicrosPerGiBMonth: '50000',
+      estimatedMicrosPerMonth: '5000000',
+      billingActive: true,
+    },
+    lastError: null,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+function instance(overrides: Partial<InstanceDto> = {}): InstanceDto {
+  return {
+    id: '55555555-5555-4555-8555-555555555555',
+    shortId: 'tmxbnd1234',
+    name: 'tmux-bundle-ubuntu',
+    computeLabel: '1 x MI325X',
+    computeType: 'gpu',
+    gpuCount: 1,
+    state: 'running',
+    startupStage: null,
+    costMicrosPerHour: '1900000',
+    ephemeralDiskGiB: 30,
+    createdAt: '2026-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+function clientWithPages(...pages: InstanceDto[]): CloudClient {
+  return {
+    listInstances: async ({ page }: { page: number }) => ({
+      items: pages[page - 1] ? [pages[page - 1]!] : [],
+      pagination: { page, pageSize: 1, totalItems: pages.length, totalPages: pages.length },
+    }),
+  } as unknown as CloudClient;
+}
+
+describe('parsePorts', () => {
+  it('reads repeated ports, and none alone as no ports', () => {
+    expect(parsePorts(['8000', '7860'])).toEqual([8000, 7860]);
+    expect(parsePorts(['none'])).toEqual([]);
+    expect(parsePorts(undefined)).toEqual([]);
+  });
+
+  it.each([['0'], ['65536'], ['8000.5'], ['http'], ['8000', '8000'], ['none', '8000']])('refuses %s', (...values) => {
+    expect(() => parsePorts(values)).toThrow(CliError);
+  });
+});
+
+describe('parseRepeatable', () => {
+  it('splits on the first =', () => {
+    expect(parseRepeatable(['A=1', 'B=x=y=z'], 'env')).toEqual([
+      { name: 'A', value: '1' },
+      { name: 'B', value: 'x=y=z' },
+    ]);
+  });
+
+  it('rejects entries without a name', () => {
+    expect(() => parseRepeatable(['novalue'], 'env')).toThrow('--env expects NAME=VALUE, got "novalue"');
+    expect(() => parseRepeatable(['=x'], 'env')).toThrow(/expects NAME=VALUE/);
+  });
+
+  it('treats missing flags as no entries', () => {
+    expect(parseRepeatable(undefined, 'secret')).toEqual([]);
+  });
+});
+
+describe('toEnvironment', () => {
+  it('passes valid unique names through', () => {
+    const pairs = [{ name: 'HF_TOKEN', value: 'x' }, { name: '_A2', value: '' }];
+    expect(toEnvironment(pairs)).toEqual(pairs);
+  });
+
+  it('rejects invalid characters with the console copy', () => {
+    expect(() => toEnvironment([{ name: '9BAD', value: 'x' }])).toThrow('Variable names must be valid and unique.');
+  });
+
+  it('rejects duplicates with the console copy', () => {
+    expect(() => toEnvironment([{ name: 'A', value: '1' }, { name: 'A', value: '2' }]))
+      .toThrow('Variable names must be valid and unique.');
+  });
+});
+
+describe('validateMounts', () => {
+  it('accepts disjoint absolute paths', () => {
+    expect(() => validateMounts([
+      { networkVolumeId: 'a', mountPath: '/workspace' },
+      { networkVolumeId: 'b', mountPath: '/data/models' },
+    ])).not.toThrow();
+  });
+
+  it('rejects nested paths', () => {
+    expect(() => validateMounts([
+      { networkVolumeId: 'a', mountPath: '/workspace' },
+      { networkVolumeId: 'b', mountPath: '/workspace/data' },
+    ])).toThrow('Mount paths must not overlap.');
+  });
+
+  it('rejects // and trailing slashes', () => {
+    expect(() => validateMounts([{ networkVolumeId: 'a', mountPath: '//workspace' }]))
+      .toThrow('Use an absolute mount path such as /workspace.');
+
+    expect(() => validateMounts([{ networkVolumeId: 'a', mountPath: '/workspace/' }]))
+      .toThrow('Use an absolute mount path such as /workspace.');
+  });
+
+  it('rejects duplicate volume ids', () => {
+    expect(() => validateMounts([
+      { networkVolumeId: 'a', mountPath: '/one' },
+      { networkVolumeId: 'a', mountPath: '/two' },
+    ])).toThrow('Each network volume can be mounted only once.');
+  });
+});
+
+describe('resolveCompute', () => {
+  it('picks the unique gpu offer for type and count', async () => {
+    const resolved = await resolveCompute(PRICES, {
+      computeType: 'gpu', gpuType: 'mi325x', gpuCount: '2',
+    }, ctx());
+
+    expect(resolved).toEqual({ computeSku: 'gpu.mi325x.2x' });
+  });
+
+  it('lists candidates when the gpu type is ambiguous', async () => {
+    const ambiguous = [
+      gpuRate('gpu.a.1x', 1, 'A100'),
+      gpuRate('gpu.b.1x', 1, 'A100'),
+    ];
+
+    await expect(resolveCompute(ambiguous, {
+      computeType: 'gpu', gpuType: 'a100',
+    }, ctx())).rejects.toThrow(/Multiple GPU offers match \(1x A100, 1x A100\)/);
+  });
+
+  it('rejects unsupported gpu counts', async () => {
+    await expect(resolveCompute(PRICES, {
+      computeType: 'gpu', gpuCount: '3',
+    }, ctx())).rejects.toThrow('--gpu-count must be 1, 2, 4, or 8');
+  });
+
+  it('picks the smallest cpu offer by default', async () => {
+    const resolved = await resolveCompute(PRICES, { computeType: 'cpu' }, ctx());
+    expect(resolved).toEqual({ computeSku: 'cpu.small' });
+  });
+
+  it('picks the requested core count', async () => {
+    const resolved = await resolveCompute(PRICES, { computeType: 'cpu', cpuCores: '16' }, ctx());
+    expect(resolved).toEqual({ computeSku: 'cpu.large' });
+  });
+
+  it('defaults to one GPU in plain mode', async () => {
+    const plain = [gpuRate('gpu.mi325x.1x', 1, 'MI325X')];
+    const resolved = await resolveCompute(plain, { computeType: 'gpu' }, ctx());
+    expect(resolved).toEqual({ computeSku: 'gpu.mi325x.1x' });
+  });
+});
+
+describe('resolveImage', () => {
+  it('resolves a template by name case-insensitively', () => {
+    expect(resolveImage(TEMPLATES, [], { template: 'pytorch' }))
+      .toEqual({ templateVersionId: TEMPLATES[0]?.version.id });
+  });
+
+  it('rejects template plus image', () => {
+    expect(() => resolveImage(TEMPLATES, [], { template: 'pytorch', image: 'nginx' }))
+      .toThrow('Choose either --template or --image, not both.');
+  });
+
+  it('rejects registry without image', () => {
+    expect(() => resolveImage(TEMPLATES, CREDENTIALS, { template: 'pytorch', registry: 'Private Hub' }))
+      .toThrow('--registry applies only with --image.');
+  });
+
+  it('resolves a private image with a named credential', () => {
+    expect(resolveImage([], CREDENTIALS, { image: 'registry.example.com/x:1', registry: 'private hub' }))
+      .toEqual({ containerImage: 'registry.example.com/x:1', registryCredentialId: CREDENTIALS[0]?.id });
+  });
+
+  it('rejects too-short image references', () => {
+    expect(() => resolveImage([], [], { image: 'x:' })).toThrow('Enter a container image.');
+  });
+
+  it('requires an explicit choice in plain mode', () => {
+    expect(() => resolveImage(TEMPLATES, [], {})).toThrow('Pass --image or --template.');
+  });
+});
+
+describe('resolveVolume', () => {
+  it('matches exact names and unique substrings', () => {
+    const volumes = [volume(), volume({ id: '44444444-4444-4444-8444-444444444444', name: 'datasets' })];
+    expect(resolveVolume(volumes, 'data')).toBe(volumes[0]?.id);
+    expect(resolveVolume(volumes, 'sets')).toBe(volumes[1]?.id);
+    expect(resolveVolume(volumes, volumes[0]!.id)).toBe(volumes[0]?.id);
+  });
+
+  it('errors on unknown references', () => {
+    expect(() => resolveVolume([volume()], 'missing')).toThrow(
+      'No network volume matching "missing". Run featherless-cloud volume ls.',
+    );
+  });
+
+  it('refuses volumes that are not attachable', () => {
+    expect(() => resolveVolume([volume({ state: 'provisioning' })], 'data'))
+      .toThrow('Volume "data" is provisioning. Wait for it to become available.');
+  });
+});
+
+describe('findInstance', () => {
+  it('matches exact names, unique substrings, and uuids', () => {
+    const found = instance();
+    const list = [found, instance({ id: '66666666-6666-4666-8666-666666666666', shortId: 'dtspr0d012', name: 'datasets' })];
+    expect(findInstance(list, 'tmux-bundle-ubuntu')).toBe(found);
+    expect(findInstance(list, 'bundle')).toBe(found);
+    expect(findInstance(list, found.id)).toBe(found);
+  });
+
+  it('lists every candidate on an ambiguous substring', () => {
+    const list = [
+      instance({ name: 'train-a' }),
+      instance({ id: '66666666-6666-4666-8666-666666666666', shortId: 'trnnb00012', name: 'train-b' }),
+    ];
+
+    expect(() => findInstance(list, 'train')).toThrow(
+      'Multiple instances match "train": train-a, train-b. Use the exact name or short id.',
+    );
+  });
+
+  it('errors on unknown references', () => {
+    expect(() => findInstance([instance()], 'missing')).toThrow(
+      'No instance matching "missing". Run featherless-cloud instance list.',
+    );
+
+    expect(() => findInstance([instance()], '99999999-9999-4999-8999-999999999999')).toThrow(
+      'No instance matching "99999999-9999-4999-8999-999999999999". Run featherless-cloud instance list.',
+    );
+  });
+});
+
+describe('resolveInstanceId', () => {
+  it('passes uuid and short id references through without listing', async () => {
+    const client = {
+      listInstances: async () => {
+        throw new Error('no call');
+      },
+    } as unknown as CloudClient;
+
+    const uuid = instance().id;
+    await expect(resolveInstanceId(client, uuid)).resolves.toBe(uuid);
+    await expect(resolveInstanceId(client, 'tmxbnd1234')).resolves.toBe('tmxbnd1234');
+  });
+
+  it('resolves a name from a later page', async () => {
+    const client = clientWithPages(instance(), instance({ id: '66666666-6666-4666-8666-666666666666', shortId: 'dtspr0d012', name: 'datasets' }));
+    await expect(resolveInstanceId(client, 'datasets')).resolves.toBe('66666666-6666-4666-8666-666666666666');
+  });
+
+  it('errors when no page matches', async () => {
+    const client = clientWithPages(instance());
+    await expect(resolveInstanceId(client, 'missing')).rejects.toThrow(CliError);
+  });
+});
+
+describe('instance names', () => {
+  it('generates console-parity random names', () => {
+    expect(randomInstanceName()).toMatch(
+      /^(amber|bold|bright|calm|clever|cosmic|eager|lucky|rapid|steady)-(comet|falcon|forge|nebula|orbit|phoenix|rocket|summit|tiger|vector)-\d{3}$/,
+    );
+  });
+
+  it('rejects uppercase and underscores', () => {
+    expect(() => assertInstanceName('bad_name')).toThrow(/lowercase letters, digits, and hyphens/);
+    expect(() => assertInstanceName('-lead')).toThrow(/lowercase/);
+    expect(() => assertInstanceName('good-name-1')).not.toThrow();
+  });
+});
+
+describe('requireDeletion', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('refuses in non-interactive mode without --yes', async () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`exit:${code}`);
+    }) as never);
+
+    const fail = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+    await expect(requireDeletion(ctx(), 'instance abc', false)).rejects.toThrow('exit:1');
+    expect(fail).toHaveBeenCalledWith(expect.stringContaining('Refusing to delete instance abc without --yes.'));
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('proceeds with --yes without prompting', async () => {
+    await expect(requireDeletion(ctx(), 'volume v', true)).resolves.toBeUndefined();
+  });
+});
+
+describe('newContent', () => {
+  it('emits only appended lines', () => {
+    expect(newContent('a\nb\n', 'a\nb\nc\n')).toBe('c\n');
+  });
+
+  it('skips the overlap when the tail window slides', () => {
+    expect(newContent('a\nb\nc\nd', 'c\nd\ne')).toBe('e');
+  });
+
+  it('prints everything after a container restart', () => {
+    expect(newContent('old output', 'fresh start\nready')).toBe('fresh start\nready');
+  });
+
+  it('emits nothing when the tail is unchanged', () => {
+    expect(newContent('same', 'same')).toBe('');
+  });
+});

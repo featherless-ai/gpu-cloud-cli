@@ -1,0 +1,46 @@
+stages:
+  - test
+
+.node-test:
+  stage: test
+  image: node:22-alpine
+  timeout: 20 minutes
+  interruptible: true
+  tags:
+    - sd-sfo3-sysops-01
+  variables:
+    COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+  # No cache: the runner has no shared cache server, so a saved store never
+  # reached the next pod and saving it cost 20-25s per job.
+  before_script:
+    # The version script's tests drive a scratch git repository.
+    - apk add --no-cache git
+    - corepack enable && corepack prepare pnpm@10.4.1 --activate
+    - pnpm install --frozen-lockfile
+  rules:
+    - if: $CI_COMMIT_BRANCH
+    - if: $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
+
+lint:
+  extends: .node-test
+  script:
+    - pnpm lint
+
+typecheck:
+  extends: .node-test
+  script:
+    - pnpm typecheck
+
+unit-tests:
+  extends: .node-test
+  before_script:
+    # sshPipeService tests check generated keys with ssh-keygen; the CLI
+    # completion tests run the generated scripts in bash and zsh.
+    - apk add --no-cache openssh-client bash zsh
+    - !reference [.node-test, before_script]
+  script:
+    - pnpm test --reporter=default --reporter=junit --outputFile=junit.xml
+  artifacts:
+    when: always
+    reports:
+      junit: junit.xml

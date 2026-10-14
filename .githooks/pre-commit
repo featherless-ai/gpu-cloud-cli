@@ -1,0 +1,9 @@
+#!/bin/sh
+# The same checks as the CI lint job, so a commit that would fail it never lands.
+# Skip once with `git commit --no-verify`.
+set -e
+# Fixable style is fixed rather than refused; fixes to staged files join the commit.
+staged=$(git diff --cached --name-only --diff-filter=ACMR)
+pnpm lint --fix
+[ -z "$staged" ] || echo "$staged" | xargs git add --
+pnpm typecheck

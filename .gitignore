@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Coverage
+coverage/
+
+# Node's on-disk compile cache
+node-compile-cache/
+
+# Environment
+.env

@@ -1,0 +1,34 @@
+{
+  "name": "@featherless-cloud/cli",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@10.4.1",
+  "bin": {
+    "featherless-cloud": "./dist/featherless-cloud"
+  },
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "build": "bun build src/index.ts --compile --target=bun --define __BINARY__=true --outfile dist/featherless-cloud",
+    "build:all": "bun run scripts/build-release.ts",
+    "prepare": "command -v git >/dev/null && git config core.hooksPath .githooks || true",
+    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "typecheck": "tsc -b && tsc -p tsconfig.tests.json",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@clack/prompts": "^1.2.0",
+    "commander": "^14.0.3",
+    "yaml": "^2.8.2",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.0.0",
+    "@vitest/coverage-v8": "^4.1.10",
+    "eslint": "^10.8.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.66.0",
+    "vitest": "^4.1.10"
+  }
+}
