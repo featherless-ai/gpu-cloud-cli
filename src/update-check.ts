@@ -1,6 +1,7 @@
 import path from 'node:path';
-import { spawn } from 'node:child_process';
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { execFile, spawn } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
+import { promisify } from 'node:util';
 import { getConfigDir } from './config';
 import { PACKAGE_NAME, VERSION, isNewer } from './version';
 
@@ -9,6 +10,8 @@ const TTL_MS = 24 * 60 * 60 * 1000;
 interface UpdateState {
   latest: string;
   checkedAt: number;
+  /** The version the background check installed, announced once on the next run. */
+  installed?: string;
 }
 
 function stateFile(): string {
@@ -98,7 +101,10 @@ export function maybeNotifyUpdate(): void {
 
   const state = readState();
 
-  if (state && isNewer(state.latest, VERSION)) {
+  if (state?.installed === VERSION) {
+    process.stderr.write(`\nUpdated featherless-cloud to ${VERSION}.\n\n`);
+    writeState({ latest: state.latest, checkedAt: state.checkedAt });
+  } else if (state && isNewer(state.latest, VERSION)) {
     process.stderr.write(
       `\nUpdate available: ${VERSION} → ${state.latest}. Run \`featherless-cloud upgrade\`.\n\n`,
     );
@@ -109,11 +115,69 @@ export function maybeNotifyUpdate(): void {
   }
 }
 
-/** Runs inside the detached child (`_check-update`): refresh the cache. */
+/** Whether the running script is this package inside npm's global folder, the only install npm can update in place. */
+export function isGlobalNpmInstall(script: string, globalRoot: string): boolean {
+  const packageDir = path.join(globalRoot, ...PACKAGE_NAME.split('/')) + path.sep;
+  return script.startsWith(packageDir);
+}
+
+/** npm's global folders: under an explicit prefix, or next to this Node.js, as npm installs by default. */
+function globalRoots(): string[] {
+  const prefixes = [process.env.npm_config_prefix, path.dirname(path.dirname(process.execPath))];
+  const roots: string[] = [];
+
+  for (const prefix of prefixes) {
+    if (!prefix) {
+      continue;
+    }
+
+    const root = process.platform === 'win32' ? path.join(prefix, 'node_modules') : path.join(prefix, 'lib', 'node_modules');
+
+    try {
+      roots.push(realpathSync(root));
+    } catch {
+      // not an npm prefix
+    }
+  }
+
+  return roots;
+}
+
+async function installLatest(version: string): Promise<boolean> {
+  if (process.env.FEATHERLESS_CLOUD_DISABLE_AUTOUPDATE) {
+    return false;
+  }
+
+  try {
+    const script = realpathSync(process.argv[1] ?? '');
+
+    if (!globalRoots().some(root => isGlobalNpmInstall(script, root))) {
+      return false;
+    }
+
+    await promisify(execFile)('npm', ['install', '--global', `${PACKAGE_NAME}@${version}`], {
+      shell: process.platform === 'win32',
+      timeout: 300_000,
+    });
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Runs inside the detached child (`_check-update`): refresh the cache and, for a global npm install,
+ * install the newer version. A failed install leaves the "Update available" notice to the next run.
+ */
 export async function runUpdateCheck(): Promise<void> {
   try {
     const latest = await fetchLatestVersion();
     writeState({ latest, checkedAt: Date.now() });
+
+    if (isNewer(latest, VERSION) && await installLatest(latest)) {
+      writeState({ latest, checkedAt: Date.now(), installed: latest });
+    }
   } catch {
     // swallow — retry on the next stale window
   }
