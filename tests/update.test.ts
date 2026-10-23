@@ -1,16 +1,18 @@
 import {
-  afterAll, beforeAll, describe, expect, it,
+  afterAll, afterEach, beforeAll, beforeEach, describe, expect, it,
 } from 'vitest';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { isGlobalNpmInstall, maybeNotifyUpdate } from '../src/update-check';
+import { isGlobalNpmInstall, offerUpdate } from '../src/update-check';
 import { VERSION } from '../src/version';
 
 let dir: string;
+let stateFile: string;
 let prevHome: string | undefined;
-let banner: string;
-let writeSpy: (chunk: string) => void;
+let prevCi: string | undefined;
+let prevTty: boolean;
+let stderr: string;
 const realWrite = process.stderr.write.bind(process.stderr);
 
 beforeAll(async () => {
@@ -18,15 +20,12 @@ beforeAll(async () => {
   dir = await fs.mkdtemp(path.join(os.tmpdir(), 'flcli-update-'));
   // The CLI derives its config dir from HOME, so isolating HOME isolates it.
   process.env.HOME = dir;
+  stateFile = path.join(dir, '.config', 'featherless-cloud-update-check.json');
 
-  banner = '';
-
-  writeSpy = (chunk: string) => {
-    banner += chunk;
+  process.stderr.write = ((chunk: string) => {
+    stderr += chunk;
     return true;
-  };
-
-  process.stderr.write = writeSpy as typeof process.stderr.write;
+  }) as typeof process.stderr.write;
 });
 
 afterAll(async () => {
@@ -41,36 +40,71 @@ afterAll(async () => {
   await fs.rm(dir, { recursive: true, force: true });
 });
 
-describe('maybeNotifyUpdate', () => {
-  it('writes no state and prints nothing when stderr is not a terminal', async () => {
-    maybeNotifyUpdate();
-    expect(banner).toBe('');
-    const entries = await fs.readdir(path.join(dir, '.config')).catch(() => [] as string[]);
-    expect(entries).not.toContain('featherless-cloud-update-check.json');
+beforeEach(async () => {
+  stderr = '';
+  prevCi = process.env.CI;
+  prevTty = process.stderr.isTTY;
+  delete process.env.CI;
+  await fs.rm(path.join(dir, '.config'), { recursive: true, force: true });
+});
+
+afterEach(() => {
+  process.stderr.isTTY = prevTty;
+
+  if (prevCi !== undefined) {
+    process.env.CI = prevCi;
+  }
+});
+
+/** A state whose check is fresh, so no background check is started. */
+async function knownLatest(latest: string, declined?: string): Promise<void> {
+  await fs.mkdir(path.dirname(stateFile), { recursive: true });
+  await fs.writeFile(stateFile, JSON.stringify({ latest, checkedAt: Date.now(), declined }));
+}
+
+describe('offerUpdate', () => {
+  it('stays silent and writes nothing when stderr is not a terminal', async () => {
+    process.stderr.isTTY = false;
+    await offerUpdate(['instance', 'list']);
+
+    expect(stderr).toBe('');
+    await expect(fs.access(stateFile)).rejects.toThrow();
   });
 
-  it('announces a version the background check installed, once', async () => {
-    const stateFile = path.join(dir, '.config', 'featherless-cloud-update-check.json');
-    await fs.mkdir(path.dirname(stateFile), { recursive: true });
-    await fs.writeFile(stateFile, JSON.stringify({ latest: VERSION, checkedAt: Date.now(), installed: VERSION }));
-
-    const tty = process.stderr.isTTY;
-    const ci = process.env.CI;
+  it('tells an install npm cannot update in place about a newer version', async () => {
     process.stderr.isTTY = true;
-    delete process.env.CI;
+    await knownLatest('99.0.0');
+    await offerUpdate(['instance', 'list']);
 
-    try {
-      maybeNotifyUpdate();
-      maybeNotifyUpdate();
-    } finally {
-      process.stderr.isTTY = tty;
+    expect(stderr).toBe(`\nUpdate available: ${VERSION} → 99.0.0. Run \`featherless-cloud upgrade\`.\n\n`);
+  });
 
-      if (ci !== undefined) {
-        process.env.CI = ci;
-      }
-    }
+  it('does not offer a version the person declined', async () => {
+    process.stderr.isTTY = true;
+    await knownLatest('99.0.0', '99.0.0');
+    await offerUpdate(['instance', 'list']);
 
-    expect(banner).toBe(`\nUpdated featherless-cloud to ${VERSION}.\n\n`);
+    expect(stderr).toBe('');
+  });
+
+  it('offers a version newer than the declined one', async () => {
+    process.stderr.isTTY = true;
+    await knownLatest('99.1.0', '99.0.0');
+    await offerUpdate(['instance', 'list']);
+
+    expect(stderr).toContain('99.1.0');
+  });
+
+  it('never interrupts scripts, completion or upgrade itself', async () => {
+    process.stderr.isTTY = true;
+    await knownLatest('99.0.0');
+
+    await offerUpdate(['instance', 'list', '--json']);
+    await offerUpdate(['--non-interactive', 'volume', 'ls']);
+    await offerUpdate(['_complete', 'instance']);
+    await offerUpdate(['upgrade']);
+
+    expect(stderr).toBe('');
   });
 });
 

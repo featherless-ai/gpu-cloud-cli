@@ -8,7 +8,7 @@ import { registerJobCommand } from './commands/job';
 import { registerExecCommand } from './commands/exec';
 import { registerUpgradeCommand } from './commands/upgrade';
 import { registerCompletionCommand } from './commands/completion';
-import { maybeNotifyUpdate, runUpdateCheck } from './update-check';
+import { offerUpdate, runUpdateCheck } from './update-check';
 import { describeError } from './error';
 import { APP_NAME, VERSION } from './version';
 import { CliCommand } from './completions';
@@ -57,5 +57,5 @@ program
     await runUpdateCheck();
   });
 
-maybeNotifyUpdate();
+await offerUpdate();
 program.parse();

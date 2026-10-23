@@ -1,17 +1,21 @@
 import path from 'node:path';
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync, realpathSync } from 'node:fs';
-import { promisify } from 'node:util';
+import * as p from '@clack/prompts';
 import { getConfigDir } from './config';
+import { CliError } from './error';
 import { PACKAGE_NAME, VERSION, isNewer } from './version';
 
 const TTL_MS = 24 * 60 * 60 * 1000;
 
+// Commands that run without a person reading the output, or are about versions themselves.
+const NO_PROMPT_COMMANDS = ['_check-update', '_complete', 'completion', 'upgrade'];
+
 interface UpdateState {
   latest: string;
   checkedAt: number;
-  /** The version the background check installed, announced once on the next run. */
-  installed?: string;
+  /** A version the person said no to; they are asked again only about a newer one. */
+  declined?: string;
 }
 
 function stateFile(): string {
@@ -35,7 +39,7 @@ function writeState(state: UpdateState): void {
   }
 }
 
-function shouldSkip(): boolean {
+function shouldSkip(argv: string[]): boolean {
   if (process.env.CI) {
     return true;
   }
@@ -44,8 +48,8 @@ function shouldSkip(): boolean {
     return true;
   }
 
-  const argv = process.argv.slice(2);
-  return argv.includes('--json') || argv.includes('--non-interactive') || argv.includes('_check-update');
+  const command = argv.find(arg => !arg.startsWith('-'));
+  return argv.includes('--json') || argv.includes('--non-interactive') || NO_PROMPT_COMMANDS.includes(command ?? '');
 }
 
 export async function fetchLatestVersion(): Promise<string> {
@@ -66,53 +70,27 @@ export async function fetchLatestVersion(): Promise<string> {
   return parsed.version;
 }
 
-function scheduleBackgroundCheck(prev: UpdateState | null): void {
-  // Stamp checkedAt now (preserving any known latest) so rapid successive
-  // runs don't each spawn a child before the first one writes its result.
-  writeState({ latest: prev?.latest ?? VERSION, checkedAt: Date.now() });
-
-  try {
-    const script = process.argv[1];
-
-    if (!script) {
-      return;
-    }
-
-    const child = spawn(process.execPath, [script, '_check-update'], {
-      detached: true,
-      stdio: 'ignore',
+/** Installs a version globally with npm. npm's own output goes to stderr in --json mode so stdout stays one JSON document. */
+export function npmInstall(spec: string, json = false): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('npm', ['install', '--global', spec], {
+      stdio: ['ignore', json ? process.stderr : 'inherit', 'inherit'],
+      shell: process.platform === 'win32',
     });
 
-    child.unref();
-  } catch {
-    // ignore; nothing we can do without blocking
-  }
-}
+    child.on('error', (err) => {
+      reject(new CliError(`Could not run npm: ${err.message}. Run: npm install --global ${spec}`));
+    });
 
-/**
- * Synchronously surface a cached "update available" banner (never blocks on the
- * network) and, if the cache is stale, fire off a detached child to refresh it
- * for next time. Call once at startup.
- */
-export function maybeNotifyUpdate(): void {
-  if (shouldSkip()) {
-    return;
-  }
+    child.on('exit', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
 
-  const state = readState();
-
-  if (state?.installed === VERSION) {
-    process.stderr.write(`\nUpdated featherless-cloud to ${VERSION}.\n\n`);
-    writeState({ latest: state.latest, checkedAt: state.checkedAt });
-  } else if (state && isNewer(state.latest, VERSION)) {
-    process.stderr.write(
-      `\nUpdate available: ${VERSION} → ${state.latest}. Run \`featherless-cloud upgrade\`.\n\n`,
-    );
-  }
-
-  if (!state || Date.now() - state.checkedAt > TTL_MS) {
-    scheduleBackgroundCheck(state);
-  }
+      reject(new CliError(`npm exited with code ${code}. Run: npm install --global ${spec}`));
+    });
+  });
 }
 
 /** Whether the running script is this package inside npm's global folder, the only install npm can update in place. */
@@ -143,41 +121,87 @@ function globalRoots(): string[] {
   return roots;
 }
 
-async function installLatest(version: string): Promise<boolean> {
-  if (process.env.FEATHERLESS_CLOUD_DISABLE_AUTOUPDATE) {
-    return false;
-  }
-
+function installedGlobally(): boolean {
   try {
     const script = realpathSync(process.argv[1] ?? '');
-
-    if (!globalRoots().some(root => isGlobalNpmInstall(script, root))) {
-      return false;
-    }
-
-    await promisify(execFile)('npm', ['install', '--global', `${PACKAGE_NAME}@${version}`], {
-      shell: process.platform === 'win32',
-      timeout: 300_000,
-    });
-
-    return true;
+    return globalRoots().some(root => isGlobalNpmInstall(script, root));
   } catch {
     return false;
   }
 }
 
+function scheduleBackgroundCheck(prev: UpdateState | null): void {
+  // Stamp checkedAt now (preserving what is known) so rapid successive
+  // runs don't each spawn a child before the first one writes its result.
+  writeState({ ...prev, latest: prev?.latest ?? VERSION, checkedAt: Date.now() });
+
+  try {
+    const script = process.argv[1];
+
+    if (!script) {
+      return;
+    }
+
+    const child = spawn(process.execPath, [script, '_check-update'], {
+      detached: true,
+      stdio: 'ignore',
+    });
+
+    child.unref();
+  } catch {
+    // ignore; nothing we can do without blocking
+  }
+}
+
 /**
- * Runs inside the detached child (`_check-update`): refresh the cache and, for a global npm install,
- * install the newer version. A failed install leaves the "Update available" notice to the next run.
+ * Offers a newer version the last background check found, then refreshes that check when it is
+ * a day old. A global npm install at a terminal is asked whether to update now; anything else
+ * gets a one-line notice. Never touches the network itself. Call once at startup.
  */
+export async function offerUpdate(argv = process.argv.slice(2)): Promise<void> {
+  if (shouldSkip(argv)) {
+    return;
+  }
+
+  const state = readState();
+
+  if (state && isNewer(state.latest, VERSION) && state.declined !== state.latest) {
+    if (process.stdin.isTTY && installedGlobally()) {
+      await askToUpdate(state);
+    } else {
+      process.stderr.write(`\nUpdate available: ${VERSION} → ${state.latest}. Run \`featherless-cloud upgrade\`.\n\n`);
+    }
+  }
+
+  if (!state || Date.now() - state.checkedAt > TTL_MS) {
+    scheduleBackgroundCheck(readState());
+  }
+}
+
+async function askToUpdate(state: UpdateState): Promise<void> {
+  const answer = await p.confirm({
+    message: `featherless-cloud ${state.latest} is available (you have ${VERSION}). Update now?`,
+  });
+
+  if (p.isCancel(answer) || !answer) {
+    writeState({ ...state, declined: state.latest });
+    process.stderr.write('Run `featherless-cloud upgrade` whenever you want it.\n\n');
+    return;
+  }
+
+  try {
+    await npmInstall(`${PACKAGE_NAME}@${state.latest}`);
+    process.stderr.write(`\nUpdated featherless-cloud to ${state.latest}.\n\n`);
+  } catch (err) {
+    process.stderr.write(`\n${err instanceof Error ? err.message : String(err)}\n\n`);
+  }
+}
+
+/** Runs inside the detached child (`_check-update`): refresh the cache. */
 export async function runUpdateCheck(): Promise<void> {
   try {
     const latest = await fetchLatestVersion();
-    writeState({ latest, checkedAt: Date.now() });
-
-    if (isNewer(latest, VERSION) && await installLatest(latest)) {
-      writeState({ latest, checkedAt: Date.now(), installed: latest });
-    }
+    writeState({ ...readState(), latest, checkedAt: Date.now() });
   } catch {
     // swallow — retry on the next stale window
   }
