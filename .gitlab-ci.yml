@@ -1,5 +1,6 @@
 stages:
   - test
+  - publish
 
 .node-test:
   stage: test
@@ -44,3 +45,23 @@ unit-tests:
     when: always
     reports:
       junit: junit.xml
+
+build:
+  extends: .node-test
+  script:
+    - pnpm build
+    - node dist/index.js --version
+    - npm pack --dry-run
+
+# Pushing a v<version> tag publishes that version to npm. NPM_TOKEN is a
+# masked, protected CI variable holding an npm automation token.
+publish:
+  extends: .node-test
+  stage: publish
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  script:
+    - test "v$(node -p "require('./package.json').version")" = "$CI_COMMIT_TAG"
+    - pnpm typecheck
+    - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+    - npm publish --access public

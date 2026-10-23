@@ -1,12 +1,9 @@
+import pkg from '../package.json' with { type: 'json' };
+
 export const APP_NAME = 'featherless-cloud';
 
-/** Package version. Single source of truth; build-release.ts verifies it matches package.json. */
-export const VERSION = '0.1.0';
-
-declare const __BINARY__: boolean;
-
-/** True only when built with `--define __BINARY__=true`; false under `bun run`/vitest. */
-export const IS_BINARY: boolean = typeof __BINARY__ !== 'undefined' && __BINARY__;
+export const PACKAGE_NAME = pkg.name;
+export const VERSION = pkg.version;
 
 export function isNewer(candidate: string, current: string): boolean {
   const a = candidate.split('.').map(Number);

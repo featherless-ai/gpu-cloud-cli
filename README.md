@@ -4,11 +4,15 @@ Command-line client for [Featherless GPU Cloud](https://cloud.featherless.ai).
 
 ## Install
 
-Download the binary for your platform from the release channel and put it on
-your `PATH` (`darwin-arm64`, `darwin-x64`, `linux-arm64`, `linux-x64`).
-`featherless-cloud upgrade` self-updates a released binary.
+Requires Node.js 20 or newer.
 
-Build from source: `pnpm install && pnpm build`.
+```sh
+npm install --global @featherlessai/gpu-cloud-cli
+featherless-cloud --help
+```
+
+Or run it once without installing: `npx @featherlessai/gpu-cloud-cli instance list`.
+`featherless-cloud upgrade` installs the latest version with npm.
 
 ## Sign in
 
@@ -36,7 +40,7 @@ Credentials live in `~/.config/featherless-cloud.yaml`.
 | `instance history <id>` | Lifecycle events |
 | `instance shell <id>` | Interactive web-terminal shell |
 | `instance ssh <id> [-i <key>]` | Native SSH shell |
-| `instance tmux <id> [name] [-i <key>]` | Create or attach a tmux session (default `default`, the session SSH logins and the browser terminal open) |
+| `instance tmux <id> [name] [-i <key>]` | Create or attach a tmux session (default `default`, the session the browser terminal opens) |
 | `runjob list/get <id>` | List Run Jobs or inspect one Run Job |
 | `exec [options] -- …` | Run a command on temporary CPU or GPU compute |
 | `runjob logs <id> [--follow]` | Live or retained Run Job logs |
@@ -45,13 +49,13 @@ Credentials live in `~/.config/featherless-cloud.yaml`.
 | `volume ls [vol://<volume>/<path>]` | List volumes, or a folder in one |
 | `volume find vol://<volume>/<path>` | Find files and folders below a folder by name, type, depth, size or age |
 | `volume cp <sources…> <destination>` | Copy between this computer and a volume, or between volumes (`-r` for folders); resumes when run again |
-| `volume sync <local-folder> vol://<volume>/<path>` | Sync a folder with a volume folder each way by newer modification time (`--mode upload|download`, `--force`, `--include`/`--exclude`); never deletes |
+| `volume sync <local-folder> vol://<volume>/<path>` | Sync a folder with a volume folder each way, sending what changed since the last sync (`--mode upload|download`, `--force`, `--include`/`--exclude`); never deletes |
 | `volume mv <sources…> <destination>` | Move inside a volume, between volumes, or between this computer and a volume |
 | `volume mkdir/rm vol://…` | Create folders, delete files or folders |
 | `pricing list [--all]` | Current compute/storage prices |
 | `billing settings` | Balance and auto-reload state |
 | `billing history` | Charge and top-up history |
-| `login` / `logout` / `upgrade` | Auth and self-update |
+| `login` / `logout` / `upgrade` | Auth and upgrade |
 | `completion bash\|zsh` | Print the shell completion script |
 
 Ids accept the 10-character short id or the uuid.
@@ -72,7 +76,8 @@ No keys are registered and no software is installed automatically. `--json` is
 not supported; `instance shell` remains the separate web-terminal alternative.
 
 Instances from custom images and current templates come with `tmux`. SSH logins without a command
-open the same `default` session; `touch ~/.no_auto_tmux` in the instance turns that off.
+open a plain shell unless the instance's Auto tmux setting is "SSH logins" (`autoTmux: ssh-only`);
+then they open the same `default` session as `instance tmux` and the browser terminal.
 Sessions use the SSH login user's default tmux socket, not a private per-command
 socket; existing tmux configuration and sessions are shared. Names are exact,
 case-sensitive, 1–64 letters, digits, underscores or hyphens, starting with a
@@ -143,7 +148,7 @@ over 16 MiB is sent as four parts at once, which the service joins into the file
 upload interrupted by a dropped connection continues from what arrived, and one interrupted by
 stopping the command continues when the same command runs again within a day. Downloads write to
 `<name>.<version>.partial` and resume from it; the file appears under its own name only once
-whole. `--concurrency` (1 to 8, default 4) sets how many files move at once.
+whole. `--concurrency` (1 to 32, default 16) sets how many files move at once.
 
 The file commands print like filesystem commands, in every output mode except `--json`: no
 spinners, results on stdout, problems on stderr, nothing on success, and exit code 1 when any file
@@ -163,17 +168,21 @@ shows a running total on stderr. `rm` asks for confirmation only at a terminal; 
 needs `--yes`.
 
 `sync` mirrors a local folder with a volume folder: it lists each folder on both sides — one
-paged request per remote folder — and sends whichever side of a file is newer by modification
-time, with a one millisecond clock tolerance. A file whose local and remote modification times
-fall within the same millisecond but whose sizes differ is a conflict: `sync` reports it and
-exits 1 rather than guess; `--mode upload` or `--mode download` with `--force` names the side
-that wins. A remote file that changes after the listing that planned its upload fails with a
-conflict rather than replace it, and a local file that appears or changes while its download
-was planned is left alone. `--mkdirs` creates missing folders on either side (including empty
-ones), `--include` and `--exclude` take relative-path globs (`*`, `**`, `?`; `node_modules/**`
-or `node_modules` skips that whole folder, `logs/*` only its direct children), `--dry-run` shows
-the plan, and `--concurrency` (1 to 8, default 4) sets how many files move at once while the walk
-continues. Sync never deletes anything, on either side.
+paged request per remote folder — and remembers, in `~/.config/featherless-cloud-sync/`, which
+files it left the same on both sides. The side that changed a file since then wins, whatever the
+clocks say; a file changed on both sides is a conflict, and a file deleted on one side stays
+deleted rather than coming back (`cp` fetches or sends it again). For a file sync has no memory
+of, the newer modification time wins, and copies with the same millisecond but different sizes
+are a conflict. On a conflict `sync` reports it and exits 1 rather than
+guess; `--mode upload` or `--mode download` with `--force` names the side that wins. A remote
+file that changes after the listing that planned its upload fails with a conflict rather than
+replace it, and a local file that appears or changes while its download was planned is left
+alone. `--mkdirs` creates missing folders on either side (including empty ones), `--include`
+and `--exclude` take relative-path globs (`*`, `**`, `?`; a pattern without a slash, like
+`*.log` or `node_modules`, matches at any depth, as in `.gitignore`; `node_modules` or
+`**/node_modules` skips those whole folders, `logs/*` only the direct children of `logs`),
+`--dry-run` shows the plan, and `--concurrency` (1 to 32, default 16) sets how many files move at
+once while the walk continues. Sync never deletes anything, on either side.
 
 `runjob` is the canonical command; `job` remains a compatibility alias.
 
@@ -201,61 +210,18 @@ CPU sizes on offer, fixed choices such as `--compute-type`, and profile names. N
 containing spaces complete with backslashes, exactly like the shell's own filename
 completion, and local paths complete via the shell's built-in filename completion.
 
----
+## Development
 
-# Package architecture
-
-> Everything above is the user manual. Below is how the package is put together.
-
-## Shape
-
-```
-   src/
-     index.ts        Commander program; registers every command group
-     commands/       instance/ volume/ pricing/ billing/ job/
-                     exec.ts login.ts logout.ts upgrade.ts completion.ts shared.ts
-     completions.ts      CliCommand, the completion engine, and the bash and zsh scripts
-     clients/cloud.ts    the single API client; every response Zod-validated
-     clients/files.ts    the volume file client: tokens from the API, resumable
-                         uploads (tus) and downloads (Range)
-     auth/browser.ts     opens the console's API key page for login
-     types/          Zod schemas mirroring the API DTOs
-     config.ts       YAML profile store   context.ts  error.ts
-     update-check.ts version.ts
+```sh
+pnpm install
+pnpm lint && pnpm typecheck && pnpm test
+pnpm build                     # dist/index.js
+pnpm dev instance list         # run from source
 ```
 
-Commands are built on `CliCommand` (`completions.ts`), so each option and argument declares
-its Tab completion where it is defined: `.option('--template <name|id>', '…', { complete: templates })`.
-A completer sits beside the resolver for the same values, mostly in `commands/shared.ts`; one
-used by a single command lives in that command's file.
+`FEATHERLESS_CLOUD_API_URL` and `FEATHERLESS_CLOUD_CONSOLE_URL` point the CLI at another API and
+console; `login` stores the API address in the profile. API responses are validated with the Zod
+schemas in `src/types/`, so a response shape change needs a matching update here.
 
-## Boundaries
-
-- **HTTP to the public API**, and for volume files to the file API host the cloud API names
-  in each file session. `instance ssh/tmux` launches the OS OpenSSH client with structured
-  connection details from the API, never an API-provided command. No database or SSH library.
-  `exec` creates a Run Job through the API and
-  polls its logs.
-- **DTO types are duplicated here as Zod schemas rather than imported from the API.** That is
-  deliberate — the binary ships independently of any API version, so it validates what it
-  receives instead of assuming a shared type. When an API response shape changes, this package
-  must be updated separately.
-- Authentication is an API key. The CLI never handles a session cookie or an OAuth secret. File
-  commands exchange it for a short-lived file token, which they treat as opaque.
-- **Self-contained.** No imports from outside this package, and nothing that names the systems
-  behind the product.
-
-## Depends on
-
-The API, and for volume files the file API host each file session names. The base URL switches on the compile-time `__BINARY__` define:
-`https://api.cloud.featherless.ai` in a built binary, `http://localhost:3001` when run from
-source. Credentials live in `~/.config/featherless-cloud.yaml` (`%APPDATA%` on Windows).
-
-## Build & run
-
-| | |
-|---|---|
-| Dev | `bun run src/index.ts` |
-| Build | `bun build --compile` → `dist/featherless-cloud`; `build:all` cross-compiles four targets |
-| Tests | `pnpm test` |
-| CI | lint, typecheck and tests; no build or deploy job — releases are produced out of band |
+Releases: bump `version` in `package.json`, merge, then push a `v<version>` tag; the CI `publish`
+job releases it to npm.

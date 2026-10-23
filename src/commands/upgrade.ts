@@ -1,15 +1,10 @@
-import path from 'node:path';
-import fs from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import type { Command } from 'commander';
 import type { CliCommand } from '../completions';
 import { createContext } from '../context';
 import { CliError } from '../error';
-import { IS_BINARY, VERSION, isNewer } from '../version';
-import { RELEASES_BASE_URL, fetchLatestRelease } from '../update-check';
-
-export function platformKey(): string {
-  return `${process.platform}-${process.arch}`;
-}
+import { PACKAGE_NAME, VERSION, isNewer } from '../version';
+import { fetchLatestVersion } from '../update-check';
 
 interface UpgradeResult {
   package: string;
@@ -18,61 +13,48 @@ interface UpgradeResult {
   upgraded: boolean;
 }
 
+// npm's own output goes to stderr in --json mode so stdout stays one JSON document.
+function npmInstall(spec: string, json: boolean): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn('npm', ['install', '--global', spec], {
+      stdio: ['ignore', json ? process.stderr : 'inherit', 'inherit'],
+      shell: process.platform === 'win32',
+    });
+
+    child.on('error', (err) => {
+      reject(new CliError(`Could not run npm: ${err.message}. Run: npm install --global ${spec}`));
+    });
+
+    child.on('exit', (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new CliError(`npm exited with code ${code}. Run: npm install --global ${spec}`));
+    });
+  });
+}
+
 export function registerUpgradeCommand(program: CliCommand): void {
   program
     .command('upgrade')
-    .description('Upgrade featherless-cloud to the latest published build')
+    .description('Upgrade featherless-cloud to the latest published version')
     .option('--force', 'reinstall even when already up to date')
     .action(async (options: { force?: boolean }, cmd: Command) => {
       const ctx = createContext(cmd);
-
-      if (!IS_BINARY) {
-        throw new CliError('This build was not compiled as a standalone binary. Run: bun run build');
-      }
-
-      if (RELEASES_BASE_URL === '') {
-        throw new CliError('Automatic updates are not configured yet. Rebuild from source: pnpm --filter @featherless-cloud/cli build');
-      }
-
       const current = VERSION;
-      const latest = await ctx.spin('Checking for updates', () => fetchLatestRelease());
+      const latest = await ctx.spin('Checking for updates', () => fetchLatestVersion());
 
-      if (!options.force && !isNewer(latest.version, current)) {
-        const result: UpgradeResult = { package: 'featherless-cloud', current, latest: latest.version, upgraded: false };
+      if (!options.force && !isNewer(latest, current)) {
+        const result: UpgradeResult = { package: PACKAGE_NAME, current, latest, upgraded: false };
         ctx.output(result, () => ({ text: `Already up to date (${current}).` }));
         return;
       }
 
-      const key = platformKey();
-      const asset = latest.assets[key];
+      await npmInstall(`${PACKAGE_NAME}@${latest}`, ctx.mode === 'json');
 
-      if (!asset) {
-        throw new CliError(`No build published for ${key}. Supported: ${Object.keys(latest.assets).join(', ')}`);
-      }
-
-      const target = process.execPath;
-      const staging = path.join(path.dirname(target), `${path.basename(target)}.new`);
-
-      await ctx.spin(`Downloading ${latest.version}`, async () => {
-        const response = await fetch(`${RELEASES_BASE_URL}/${latest.version}/${asset}`, { redirect: 'follow' });
-
-        if (!response.ok) {
-          throw new CliError(`Download failed with status ${response.status}.`);
-        }
-
-        const bytes = Buffer.from(await response.arrayBuffer());
-        await fs.writeFile(staging, bytes, { mode: 0o755 });
-        await fs.chmod(staging, 0o755);
-      });
-
-      try {
-        await fs.rename(staging, target);
-      } catch (err) {
-        await fs.rm(staging, { force: true });
-        throw new CliError(`Could not replace the running binary: ${err instanceof Error ? err.message : String(err)}`);
-      }
-
-      const result: UpgradeResult = { package: 'featherless-cloud', current, latest: latest.version, upgraded: true };
-      ctx.output(result, () => ({ text: `Upgraded ${current} → ${latest.version}.` }));
+      const result: UpgradeResult = { package: PACKAGE_NAME, current, latest, upgraded: true };
+      ctx.output(result, () => ({ text: `Upgraded ${current} → ${latest}.` }));
     });
 }

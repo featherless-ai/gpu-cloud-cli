@@ -1,12 +1,6 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": true,
-    "composite": false,
-    "incremental": false,
-    "declaration": false,
-    "declarationMap": false,
-    "rootDir": ".",
     "types": [
       "node",
       "vitest/globals"

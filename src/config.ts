@@ -3,7 +3,6 @@ import path from 'node:path';
 import fs from 'node:fs/promises';
 import YAML from 'yaml';
 import { CliError } from './error';
-import { IS_BINARY } from './version';
 
 export interface Profile {
   apiBase: string;
@@ -24,14 +23,12 @@ export interface ResolvedAuth {
   profile: string;
 }
 
-// The compiled binary targets the public cloud; running from source targets
-// the main checkout's development environment.
 export function apiBaseUrl(): string {
-  return IS_BINARY ? 'https://api.cloud.featherless.ai' : 'http://localhost:3001';
+  return process.env.FEATHERLESS_CLOUD_API_URL || 'https://api.cloud.featherless.ai';
 }
 
 export function consoleBaseUrl(): string {
-  return IS_BINARY ? 'https://console.cloud.featherless.ai' : 'http://localhost:4000';
+  return process.env.FEATHERLESS_CLOUD_CONSOLE_URL || 'https://console.cloud.featherless.ai';
 }
 
 // The config lives directly in the per-user config directory on every

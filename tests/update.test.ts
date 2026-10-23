@@ -5,7 +5,6 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { maybeNotifyUpdate } from '../src/update-check';
-import { platformKey } from '../src/commands/upgrade';
 
 let dir: string;
 let prevHome: string | undefined;
@@ -41,16 +40,8 @@ afterAll(async () => {
   await fs.rm(dir, { recursive: true, force: true });
 });
 
-describe('platformKey', () => {
-  it('looks like <os>-<arch>', () => {
-    expect(platformKey()).toMatch(/^[a-z]+-[a-z0-9_]+$/);
-  });
-});
-
 describe('maybeNotifyUpdate', () => {
-  it('writes no state and prints nothing without release hosting', async () => {
-    // RELEASES_BASE_URL is '' (hosting not shipped) and IS_BINARY is false
-    // under vitest — both no-op guards apply.
+  it('writes no state and prints nothing when stderr is not a terminal', async () => {
     maybeNotifyUpdate();
     expect(banner).toBe('');
     const entries = await fs.readdir(path.join(dir, '.config')).catch(() => [] as string[]);

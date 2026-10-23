@@ -2,21 +2,13 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { getConfigDir } from './config';
-import { IS_BINARY, VERSION, isNewer } from './version';
-
-/** Single integration point for binary hosting; empty until hosting ships. */
-export const RELEASES_BASE_URL = '';
+import { PACKAGE_NAME, VERSION, isNewer } from './version';
 
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 interface UpdateState {
   latest: string;
   checkedAt: number;
-}
-
-export interface LatestRelease {
-  version: string;
-  assets: Record<string, string>;
 }
 
 function stateFile(): string {
@@ -53,8 +45,8 @@ function shouldSkip(): boolean {
   return argv.includes('--json') || argv.includes('--non-interactive') || argv.includes('_check-update');
 }
 
-export async function fetchLatestRelease(): Promise<LatestRelease> {
-  const response = await fetch(`${RELEASES_BASE_URL}/latest.json`, {
+export async function fetchLatestVersion(): Promise<string> {
+  const response = await fetch(`https://registry.npmjs.org/${PACKAGE_NAME}/latest`, {
     signal: AbortSignal.timeout(5000),
   });
 
@@ -62,17 +54,13 @@ export async function fetchLatestRelease(): Promise<LatestRelease> {
     throw new Error(`Release lookup failed with status ${response.status}.`);
   }
 
-  const parsed = await response.json() as Partial<LatestRelease>;
+  const parsed = await response.json() as { version?: unknown };
 
-  if (typeof parsed.version !== 'string' || !parsed.assets || typeof parsed.assets !== 'object') {
+  if (typeof parsed.version !== 'string') {
     throw new Error('Release index is malformed.');
   }
 
-  return { version: parsed.version, assets: parsed.assets };
-}
-
-function hostingReady(): boolean {
-  return IS_BINARY && RELEASES_BASE_URL !== '';
+  return parsed.version;
 }
 
 function scheduleBackgroundCheck(prev: UpdateState | null): void {
@@ -81,8 +69,13 @@ function scheduleBackgroundCheck(prev: UpdateState | null): void {
   writeState({ latest: prev?.latest ?? VERSION, checkedAt: Date.now() });
 
   try {
-    // The compiled binary is argv[0]; no script path needed.
-    const child = spawn(process.execPath, ['_check-update'], {
+    const script = process.argv[1];
+
+    if (!script) {
+      return;
+    }
+
+    const child = spawn(process.execPath, [script, '_check-update'], {
       detached: true,
       stdio: 'ignore',
     });
@@ -99,7 +92,7 @@ function scheduleBackgroundCheck(prev: UpdateState | null): void {
  * for next time. Call once at startup.
  */
 export function maybeNotifyUpdate(): void {
-  if (!hostingReady() || shouldSkip()) {
+  if (shouldSkip()) {
     return;
   }
 
@@ -118,13 +111,9 @@ export function maybeNotifyUpdate(): void {
 
 /** Runs inside the detached child (`_check-update`): refresh the cache. */
 export async function runUpdateCheck(): Promise<void> {
-  if (!hostingReady()) {
-    return;
-  }
-
   try {
-    const latest = await fetchLatestRelease();
-    writeState({ latest: latest.version, checkedAt: Date.now() });
+    const latest = await fetchLatestVersion();
+    writeState({ latest, checkedAt: Date.now() });
   } catch {
     // swallow — retry on the next stale window
   }

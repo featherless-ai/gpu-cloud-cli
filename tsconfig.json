@@ -12,19 +12,15 @@
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "composite": true,
-    "incremental": true,
     "verbatimModuleSyntax": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitOverride": true,
-    "outDir": "dist",
-    "rootDir": "src",
     "types": [
       "node"
-    ]
+    ],
+    "noEmit": true
   },
-  "include": ["src"]
+  "include": [
+    "src"
+  ]
 }
