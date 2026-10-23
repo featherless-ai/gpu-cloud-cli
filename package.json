@@ -1,7 +1,8 @@
 {
   "name": "@featherlessai/gpu-cloud-cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Command-line client for Featherless GPU Cloud",
+  "homepage": "https://console.cloud.featherless.ai",
   "license": "UNLICENSED",
   "type": "module",
   "packageManager": "pnpm@10.4.1",
