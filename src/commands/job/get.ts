@@ -35,6 +35,7 @@ export function registerJobGetCommand(parent: CliCommand): void {
           `STATE       ${item.admissionState === 'waiting' ? WAITING_LABELS[item.statusReason ?? ''] ?? 'waiting' : item.state}`,
           `COMPUTE     ${item.computeType === 'gpu' ? `${item.gpuCount} x ${item.resources.gpuModel ?? item.computeSku}` : `${item.resources.cpuCores} vCPU / ${item.resources.memoryGiB} GiB`}`,
           `HOURLY      ${formatDollars(item.costMicrosPerHour)}/hr`,
+          ...(item.computeDiscount ? [`DISCOUNT    ${item.computeDiscount.name}, list price ${formatDollars(listHourly(item))}/hr`] : []),
           `IMAGE       ${item.image.reference}`,
           `COMMAND     ${item.command.join(' ')}`,
           `TIMEOUT     ${item.timeoutSeconds}s after compute assignment`,
@@ -46,4 +47,15 @@ export function registerJobGetCommand(parent: CliCommand): void {
         ].join('\n'),
       }));
     });
+}
+
+/** What the job would cost an hour without its discount. */
+function listHourly(job: RunJobDto): string {
+  if (!job.computeDiscount) {
+    return job.costMicrosPerHour;
+  }
+
+  const quantity = job.computeType === 'gpu' ? job.gpuCount : job.resources.cpuCores;
+  const saved = (BigInt(job.computeDiscount.listUnitPriceMicros) - BigInt(job.computeDiscount.unitPriceMicros)) * BigInt(quantity);
+  return (BigInt(job.costMicrosPerHour) + saved).toString();
 }

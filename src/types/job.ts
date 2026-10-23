@@ -59,6 +59,7 @@ export const runJobDtoSchema = z.object({
   startedAt: z.string().nullable(),
   finishedAt: z.string().nullable(),
   costMicrosPerHour: z.string(),
+  computeDiscount: z.object({ name: z.string(), listUnitPriceMicros: z.string(), unitPriceMicros: z.string() }).nullable().optional(),
   image: z.object({ source: z.enum(['template', 'custom']), reference: z.string() }),
   networkVolumeMounts: z.array(z.object({
     id: z.string().uuid(),

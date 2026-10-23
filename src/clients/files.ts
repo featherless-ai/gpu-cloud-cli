@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { createReadStream, createWriteStream } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -120,6 +121,8 @@ function counter(onBytes: (count: number) => void): Transform {
 export class FilesClient {
   private session: FileSession | null = null;
   private pending: Promise<FileSession> | null = null;
+  private stateSaves: Promise<void> = Promise.resolve();
+  private readonly partialsByFolder = new Map<string, Promise<Set<string>>>();
   private readonly delay: (attempt: number, retryAfterSeconds: number | null) => number;
   private readonly stateFile: string;
   private readonly chunkBytes: number;
@@ -388,19 +391,25 @@ export class FilesClient {
     }
   }
 
-  private async rememberUpload(key: string, upload: { url: string } | { lanes: string[] } | null): Promise<void> {
-    const state = await this.uploadState();
+  private rememberUpload(key: string, upload: { url: string } | { lanes: string[] } | null): Promise<void> {
+    // Uploads running at once take turns, so each save reads the one before it and none is lost.
+    const save = this.stateSaves.then(async () => {
+      const state = await this.uploadState();
 
-    if (upload) {
-      state[key] = { ...upload, at: Date.now() };
-    } else {
-      delete state[key];
-    }
+      if (upload) {
+        state[key] = { ...upload, at: Date.now() };
+      } else {
+        delete state[key];
+      }
 
-    await fs.mkdir(path.dirname(this.stateFile), { recursive: true });
-    const temporary = `${this.stateFile}.${process.pid}.tmp`;
-    await fs.writeFile(temporary, JSON.stringify(state), { mode: 0o600 });
-    await fs.rename(temporary, this.stateFile);
+      await fs.mkdir(path.dirname(this.stateFile), { recursive: true });
+      const temporary = `${this.stateFile}.${process.pid}.${randomUUID()}.tmp`;
+      await fs.writeFile(temporary, JSON.stringify(state), { mode: 0o600 });
+      await fs.rename(temporary, this.stateFile);
+    });
+
+    this.stateSaves = save.catch(() => undefined);
+    return save;
   }
 
   /** How much of an upload the server holds, or null when it no longer exists. */
@@ -728,6 +737,24 @@ export class FilesClient {
   }
 
   /**
+   * The partial downloads an earlier run left in a folder, made and read once per folder: reading
+   * a folder of 50,000 files for every file downloaded into it cost 18 ms each.
+   */
+  private partialsIn(folder: string): Promise<Set<string>> {
+    let found = this.partialsByFolder.get(folder);
+
+    if (!found) {
+      found = fs.mkdir(folder, { recursive: true })
+        .then(() => fs.readdir(folder))
+        .then(names => new Set(names.filter(name => name.endsWith('.partial'))));
+
+      this.partialsByFolder.set(folder, found);
+    }
+
+    return found;
+  }
+
+  /**
    * Downloads one file to `local`, through `<local>.<version>.partial` so an
    * interrupted download resumes in the next run and `local` only ever holds
    * a whole file. The remote modification time is kept.
@@ -740,12 +767,13 @@ export class FilesClient {
     const progress = onProgress ?? (() => undefined);
     const partial = `${local}.${remote.version.slice(0, 12)}.partial`;
     const folder = path.dirname(local);
-    await fs.mkdir(folder, { recursive: true });
+    const leftovers = await this.partialsIn(folder);
 
     // Partial downloads of other versions of this file can't be resumed.
-    for (const name of await fs.readdir(folder)) {
-      if (name.startsWith(`${path.basename(local)}.`) && name.endsWith('.partial') && path.join(folder, name) !== partial) {
+    for (const name of leftovers) {
+      if (name.startsWith(`${path.basename(local)}.`) && path.join(folder, name) !== partial) {
         await fs.rm(path.join(folder, name), { force: true });
+        leftovers.delete(name);
       }
     }
 

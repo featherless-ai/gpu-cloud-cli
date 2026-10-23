@@ -11,7 +11,10 @@ import {
 import { CliError, describeError } from '../../error';
 import { findVolume, profiles, requireDeletion, UUID_PATTERN } from '../shared';
 
-const MAX_CONCURRENCY = 8;
+// A file server takes 32 transfers per volume at once; every file waits a round trip, so more at
+// once is faster up to there.
+export const MAX_CONCURRENCY = 32;
+export const DEFAULT_CONCURRENCY = 16;
 const MAX_VOLUMES = 3;
 /** Longest typed prefix that still completes to the scheme, e.g. `vol` → `vol://`. */
 const SCHEME_PREFIX = 3;
@@ -309,7 +312,7 @@ export async function filesFor(refs: string[], profile: string | undefined, acro
 }
 
 export function concurrency(value: string | undefined): number {
-  const parsed = Number(value ?? 4);
+  const parsed = Number(value ?? DEFAULT_CONCURRENCY);
 
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_CONCURRENCY) {
     throw new CliError(`--concurrency must be 1 to ${MAX_CONCURRENCY}.`);
@@ -542,6 +545,14 @@ async function removeEmptyRemote(files: FilesClient, folder: string): Promise<vo
   });
 }
 
+/**
+ * Whether a local file and a volume file carry the same modification time. The volume keeps whole
+ * milliseconds, and copies keep the local time cut to the millisecond, so a copy always matches.
+ */
+export function sameModifiedTime(localMs: number, modifiedAt: string): boolean {
+  return Math.floor(localMs) === Date.parse(modifiedAt);
+}
+
 /** Copies files from this computer into a volume. */
 export async function upload(ctx: CliContext, { files, volumeName }: VolumeFiles, sources: string[], destination: VolumeAddress, options: CopyOptions): Promise<TransferReport> {
   const existing = destination.folder ? null : await files.entry(destination.path);
@@ -574,7 +585,7 @@ export async function upload(ctx: CliContext, { files, volumeName }: VolumeFiles
 
     await eachConcurrently(planned, options.limit, async (item) => {
       const existing = await files.entry(item.remote);
-      const same = existing?.type === 'file' && existing.sizeBytes === item.bytes && Date.parse(existing.modifiedAt) === Math.floor(item.mtimeMs);
+      const same = existing?.type === 'file' && existing.sizeBytes === item.bytes && sameModifiedTime(item.mtimeMs, existing.modifiedAt);
       (same ? skipped : pending).push(item);
     });
   }
@@ -641,7 +652,7 @@ export async function download(ctx: CliContext, { files, volumeName }: VolumeFil
 
     for (const item of planned) {
       const local = await fs.stat(item.target).catch(() => null);
-      const same = local?.isFile() && local.size === item.bytes && Math.floor(local.mtimeMs) === Date.parse(item.entry.modifiedAt);
+      const same = local?.isFile() && local.size === item.bytes && sameModifiedTime(local.mtimeMs, item.entry.modifiedAt);
       (same ? skipped : pending).push(item);
     }
   }
@@ -962,7 +973,7 @@ export function registerVolumeFileCommands(volume: CliCommand): void {
     .option('-r, --recursive', 'copy folders and everything in them')
     .option('--overwrite', 'replace files that already exist at the destination')
     .option('--update', 'skip files whose size and modification time already match')
-    .option('--concurrency <n>', `files at a time, 1 to ${MAX_CONCURRENCY}`, '4')
+    .option('--concurrency <n>', `files at a time, 1 to ${MAX_CONCURRENCY}`, String(DEFAULT_CONCURRENCY))
     .option('--dry-run', 'show what would be copied')
     .option('-v, --verbose', 'print each file as it is copied')
     .option('--progress', 'show a running total on stderr')
@@ -991,7 +1002,7 @@ export function registerVolumeFileCommands(volume: CliCommand): void {
     .usage('[options] <sources...> <destination>')
     .description('Move files or folders inside a volume, between volumes, or between this computer and a volume')
     .option('--overwrite', 'replace files at the destination')
-    .option('--concurrency <n>', `files at a time, 1 to ${MAX_CONCURRENCY}`, '4')
+    .option('--concurrency <n>', `files at a time, 1 to ${MAX_CONCURRENCY}`, String(DEFAULT_CONCURRENCY))
     .option('-v, --verbose', 'print each file as it is moved')
     .option('--progress', 'show a running total on stderr')
     .option('--profile <name>', 'profile to use', { complete: profiles })

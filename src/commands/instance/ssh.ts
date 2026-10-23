@@ -142,7 +142,7 @@ export function registerInstanceSshCommands(parent: CliCommand): void {
   parent.command('tmux')
     .argument('<id>', 'instance name or short id', { complete: instances })
     .argument('[name]', 'tmux session name')
-    .description('Create or attach an exact named tmux session over SSH (default: default, the session SSH logins and the browser terminal open)')
+    .description('Create or attach an exact named tmux session over SSH (default: default, the session the browser terminal opens)')
     .option('-i, --identity <file>', 'SSH private key file (otherwise use SSH config/agent)')
     .option('--profile <name>', 'profile to use', { complete: profiles })
     .addHelpText('after', '\nNames: 1–64 letters, digits, underscores or hyphens; start with a letter or digit.\nUses tmux on the default socket for the SSH login user; tmux must already be installed.\nDetach with Ctrl-b d; reconnect with the same name. Enter then ~. disconnects SSH.\nSessions survive disconnects, not instance stop/restart/replacement or tmux server exit.\nNo software is installed and no SSH keys are registered automatically.')

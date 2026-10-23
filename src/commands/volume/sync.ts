@@ -1,22 +1,26 @@
-import { lstat, mkdir, opendir, realpath } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
+import {
+  lstat, mkdir, opendir, readFile, realpath, rename, writeFile,
+} from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import type { Command } from 'commander';
 import type { CliCommand } from '../../completions';
 import { FileApiError, type FileEntry } from '../../clients/files';
+import { getConfigDir } from '../../config';
 import { createContext, type CliContext } from '../../context';
 import { CliError, describeError } from '../../error';
 import { profiles } from '../shared';
 import {
-  concurrency, filesFor, formatSize, progressLine, remotePath, volumeAddress, volumePaths, type VolumeFiles,
+  DEFAULT_CONCURRENCY, MAX_CONCURRENCY, concurrency, filesFor, formatSize, progressLine, remotePath, sameModifiedTime, volumeAddress, volumePaths,
+  type VolumeFiles,
 } from './files';
 
-const CLOCK_TOLERANCE_MS = 1;
 const MAX_DEPTH = 20;
-const MAX_ENTRIES = 100_000;
-const MAX_CONCURRENCY = 8;
 const MAX_REPORT_ACTIONS = 1000;
 /** This CLI's interrupted download staging files, `name.<12 hex>.partial`. */
 const PARTIAL_PATTERN = /\.[0-9a-f]{12}\.partial$/;
+/** Staging files in a volume: the CLI's, and the file server's unfinished uploads, `name.<8 hex>.partial`. */
+const REMOTE_STAGING_PATTERN = /\.(?:[0-9a-f]{8}|[0-9a-f]{12})\.partial$/;
 
 export type SyncMode = 'upload' | 'download' | 'both';
 
@@ -62,10 +66,16 @@ export interface SyncReport {
   truncated: boolean;
 }
 
-/** One planned step of a sync: a file one way or the other, or a folder to create. */
+/** A file as the last sync left it on both sides: its size and whole-millisecond modification time. */
+interface Synced {
+  size: number;
+  modifiedAt: number;
+}
+
+/** One planned step of a sync: a file one way or the other, or a folder to create. `key` is the path below the root. */
 type Task =
-  | { kind: 'upload'; local: string; remote: string; bytes: number; replace: boolean; ifMatch?: string }
-  | { kind: 'download'; local: string; entry: FileEntry; bytes: number; expected?: LocalFile }
+  | { kind: 'upload'; key: string; local: string; remote: string; bytes: number; modifiedAt: number; replace: boolean; ifMatch?: string }
+  | { kind: 'download'; key: string; local: string; entry: FileEntry; bytes: number; expected?: LocalFile }
   | { kind: 'mkdir-remote'; remote: string }
   | { kind: 'mkdir-local'; local: string };
 
@@ -80,13 +90,17 @@ interface LocalFile {
   ino: number;
 }
 
-/** A glob into a regular expression: `*` any run but `/`, `**` any run, `?` one character but `/`. */
-export function glob(pattern: string): RegExp {
+/**
+ * A glob into a regular expression over a path below the sync root: `*` any run but `/`, `**` any
+ * run, `?` one character but `/`. A pattern without a slash matches a name at any depth, as in
+ * .gitignore; one with a slash matches from the root.
+ */
+export function glob(pattern: string, anchored = pattern.includes('/')): RegExp {
   if (!pattern || pattern.length > 256) {
     throw new CliError('Glob patterns must contain 1–256 characters.');
   }
 
-  let text = '^';
+  let text = anchored ? '^' : '^(?:.*/)?';
 
   for (let index = 0; index < pattern.length; index++) {
     const char = pattern[index]!;
@@ -114,13 +128,15 @@ export function glob(pattern: string): RegExp {
  *
  * Each folder is listed on both sides and diffed locally — one bounded, paged
  * request per remote folder — so an interrupted sync resumes where the next
- * one lists, without walking the whole volume again. The newer side of each
- * file wins, with a one millisecond clock tolerance; a file that changed on
- * both sides at the same time, with different sizes, is a conflict rather
- * than a guess. Sync never deletes: it only sends, receives and creates
- * folders. Every remote write is version-guarded, so a file that changed
- * remotely after the listing that planned its upload fails with a conflict
- * instead of replacing it.
+ * one lists, without walking the whole volume again. Sync remembers what it
+ * left the same on both sides, so the side that changed since then wins
+ * whatever the clocks say, a file changed on both sides is a conflict, and a
+ * file deleted on one side stays deleted. For a file with no such memory the
+ * newer modification time wins, and same-millisecond copies of different
+ * sizes are a conflict rather than a guess. Sync never deletes: it only
+ * sends, receives and creates folders. Every remote write is version-guarded,
+ * so a file that changed remotely after the listing that planned its upload
+ * fails with a conflict instead of replacing it.
  */
 export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: VolumeFiles, local: string, remoteBase: string, options: SyncOptions = {}): Promise<SyncReport> {
   const mode = options.mode ?? 'both';
@@ -133,7 +149,7 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
     throw new CliError('--force needs --mode upload or --mode download; name which side wins.');
   }
 
-  const limit = options.concurrency ?? 4;
+  const limit = options.concurrency ?? DEFAULT_CONCURRENCY;
 
   if (!Number.isInteger(limit) || limit < 1 || limit > MAX_CONCURRENCY) {
     throw new CliError(`--concurrency must be 1 to ${MAX_CONCURRENCY}.`);
@@ -143,12 +159,15 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
     remotePath(remoteBase);
   }
 
-  const root = resolve(local);
-  const rootStat = await lstat(root).catch(() => null);
+  const given = resolve(local);
+  const rootStat = await lstat(given).catch(() => null);
 
-  if (rootStat && (!rootStat.isDirectory() || rootStat.isSymbolicLink() || await realpath(root) !== root)) {
+  if (rootStat && (!rootStat.isDirectory() || rootStat.isSymbolicLink())) {
     throw new CliError(`${local} is not a real folder; sync the folder itself, not a link to it.`);
   }
+
+  // Links above the folder are fine, like macOS's /tmp; its real path names it the same way every time.
+  const root = rootStat ? await realpath(given) : given;
 
   if (!rootStat && (mode === 'upload' || !options.mkdirs)) {
     throw new CliError(`${local} does not exist; pass --mkdirs to create it for downloads.`);
@@ -171,6 +190,44 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
 
   if (missingRemote && (mode === 'download' || !options.mkdirs)) {
     throw new CliError(`vol://${volumeName}/${remoteBase} does not exist; pass --mkdirs to create it for uploads.`);
+  }
+
+  // What the last sync of this pair of folders left the same on both sides, by path below the
+  // root. A side missing whole is a fresh copy, not a deletion of everything, so it starts over.
+  const pair = createHash('sha256').update([files.volumeId, remoteBase, root].join('\n')).digest('hex');
+  const historyFile = join(getConfigDir(), 'featherless-cloud-sync', `${pair.slice(0, 32)}.json`);
+  let saved: Record<string, Synced> = {};
+
+  if (rootStat && !missingRemote) {
+    const text = await readFile(historyFile, 'utf8').catch(() => null);
+
+    try {
+      saved = text ? (JSON.parse(text) as { files: Record<string, Synced> }).files : {};
+    } catch {
+      saved = {};
+    }
+  }
+
+  const history = new Map(Object.entries(saved));
+  // What this run leaves the same on both sides, saved over the history when it ends.
+  const synced = new Map(history);
+  const historyFolders = new Set<string>();
+  const historyChildren = new Map<string, string[]>();
+
+  for (const key of history.keys()) {
+    const slash = key.lastIndexOf('/');
+    const parent = slash === -1 ? '' : key.slice(0, slash);
+    const siblings = historyChildren.get(parent);
+
+    if (siblings) {
+      siblings.push(key);
+    } else {
+      historyChildren.set(parent, [key]);
+    }
+
+    for (let at = key.indexOf('/'); at !== -1; at = key.indexOf('/', at + 1)) {
+      historyFolders.add(key.slice(0, at));
+    }
   }
 
   const report: SyncReport = {
@@ -243,32 +300,34 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
 
   const target = (relative: string): string => [remoteBase, relative].filter(Boolean).join('/');
   const tooDeep = (relative: string): boolean => target(relative).split('/').length > MAX_DEPTH;
-  const include = (options.include ?? []).map(glob);
-  const exclude = (options.exclude ?? []).map(glob);
+  const include = (options.include ?? []).map(pattern => glob(pattern));
+  const exclude = (options.exclude ?? []).map(pattern => glob(pattern));
 
   const accepted = (relative: string): boolean => (!include.length || include.some(regex => regex.test(relative)))
     && !exclude.some(regex => regex.test(relative));
 
-  // A folder can only be skipped whole when its path itself is excluded:
-  // `node_modules/**` covers everything below node_modules, and a plain
-  // `node_modules` names the folder itself. `logs/*` only excludes direct
-  // children, so nested files below it must still be reachable.
-  const plain = (pattern: string): boolean => !/[*?]/.test(pattern);
+  // A folder is skipped whole when a pattern names the folder itself:
+  // `node_modules/**` covers everything below node_modules, and a last part
+  // without wildcards — `node_modules`, `**/node_modules` — names the folder.
+  // `logs/*` and `*.log` name files, so nested files below a folder they
+  // match must still be reachable.
+  const literal = (pattern: string): boolean => !/[*?]/.test(pattern);
 
   const folderExcludes = (options.exclude ?? []).flatMap(pattern => {
     if (pattern.endsWith('/**')) {
-      return [glob(pattern.slice(0, -3) || '*')];
+      return [glob(pattern.slice(0, -3) || '*', true)];
     }
 
-    return plain(pattern) ? [glob(pattern)] : [];
+    return literal(pattern.slice(pattern.lastIndexOf('/') + 1)) ? [glob(pattern)] : [];
   });
 
   const excluded = (relative: string): boolean => folderExcludes.some(regex => regex.test(relative));
 
   // The other side of the globs: with --include, a folder nothing below can
-  // match is skipped too. A pattern can only reach below a folder when its
-  // literal prefix can be a prefix of the paths below, or starts with a
-  // wildcard; anything else would need a path the glob cannot spell.
+  // match is skipped too. A pattern can only reach below a folder when it
+  // matches at any depth, or its literal prefix can be a prefix of the paths
+  // below, or starts with a wildcard; anything else would need a path the
+  // glob cannot spell.
   const literalPrefix = (pattern: string): string => {
     const wildcard = /[*?]/.exec(pattern);
     return wildcard ? pattern.slice(0, wildcard.index) : pattern;
@@ -276,11 +335,8 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
 
   const reachable = (folder: string): boolean => !(options.include ?? []).some(Boolean) || (options.include ?? []).some(pattern => {
     const prefix = literalPrefix(pattern);
-    return prefix === '' || `${folder}/`.startsWith(prefix) || prefix.startsWith(`${folder}/`);
+    return !pattern.includes('/') || prefix === '' || `${folder}/`.startsWith(prefix) || prefix.startsWith(`${folder}/`);
   });
-
-  let seenLocal = 0;
-  let seenRemote = 0;
 
   /** The local side of one folder: files to diff, folders to walk, and names nothing can replace. */
   async function listLocal(folder: string, relative: string): Promise<{ files: Map<string, LocalFile>; dirs: Set<string>; special: Set<string> }> {
@@ -289,10 +345,6 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
     const special = new Set<string>();
 
     for await (const child of await opendir(folder)) {
-      if (++seenLocal > MAX_ENTRIES) {
-        throw new CliError(`The sync source exceeds ${MAX_ENTRIES.toLocaleString()} entries; sync it in parts.`);
-      }
-
       // Children are keyed by their path below the sync root, the same shape
       // the remote side is keyed by, so the two sides diff below the root.
       const name = relative ? `${relative}/${child.name}` : child.name;
@@ -327,13 +379,7 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
   /** The remote side of one folder, or nothing when the folder is not there. */
   async function listRemote(folder: string): Promise<FileEntry[] | null> {
     try {
-      const entries = await files.list(folder);
-
-      if ((seenRemote += entries.length) > MAX_ENTRIES) {
-        throw new CliError(`The volume folder exceeds ${MAX_ENTRIES.toLocaleString()} entries; sync it in parts.`);
-      }
-
-      return entries;
+      return await files.list(folder);
     } catch (error) {
       if (error instanceof FileApiError && error.status === 404) {
         return null;
@@ -343,8 +389,75 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
     }
   }
 
+  // Listings run ahead of the walk, a few at once, so it doesn't wait a round trip per folder. Six
+  // at prod's ~0.2 s round trip stays under the file server's 32 listings a second.
+  const LISTINGS_AHEAD = 6;
+
+  interface Listing {
+    local: Awaited<ReturnType<typeof listLocal>> | null;
+    remote: FileEntry[];
+  }
+
+  const listings = new Map<string, Promise<Listing>>();
+  const listingWaiters: Array<() => void> = [];
+  let listingsRunning = 0;
+
+  async function listFolder(relative: string, walkMode: WalkMode): Promise<Listing> {
+    if (listingsRunning < LISTINGS_AHEAD) {
+      listingsRunning += 1;
+    } else {
+      // The listing that finishes hands its place straight to this one.
+      await new Promise<void>(resolve => listingWaiters.push(resolve));
+    }
+
+    try {
+      const [local, remote] = await Promise.all([
+        walkMode === 'remote' ? null : listLocal(join(root, relative), relative),
+        walkMode === 'local' ? [] : listRemote(target(relative)).then(entries => entries ?? []),
+      ]);
+
+      return { local, remote };
+    } finally {
+      const next = listingWaiters.shift();
+
+      if (next) {
+        next();
+      } else {
+        listingsRunning -= 1;
+      }
+    }
+  }
+
+  /** Starts listing a folder the walk will reach, where walking it lists it at all. */
+  function listAhead(relative: string, walkMode: WalkMode): void {
+    const skipped = walkMode !== 'pair' && historyFolders.has(relative) && !options.force;
+    const refused = (walkMode === 'local' && (tooDeep(relative) || !options.mkdirs)) || (walkMode === 'remote' && !options.mkdirs);
+
+    if (listings.has(relative) || skipped || refused) {
+      return;
+    }
+
+    const listing = listFolder(relative, walkMode);
+    // The walk reads the failure when it reaches the folder; until then it is not unhandled.
+    listing.catch(() => undefined);
+    listings.set(relative, listing);
+  }
+
   /** Walks one folder on whichever sides hold it, yielding the tasks it plans. */
   async function* walk(relative: string, walkMode: WalkMode): AsyncGenerator<Task> {
+    // A folder the last sync left on both sides and one side has deleted since stays deleted.
+    if (walkMode !== 'pair' && historyFolders.has(relative) && !options.force) {
+      report.skipped += 1;
+
+      record({
+        path: target(relative),
+        action: 'skipped',
+        reason: walkMode === 'remote' ? 'Deleted on this computer since the last sync.' : 'Deleted in the volume since the last sync.',
+      });
+
+      return;
+    }
+
     if (walkMode === 'local') {
       if (tooDeep(relative)) {
         conflict(target(relative), 'The volume cannot hold a path this deep.');
@@ -366,8 +479,9 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
       yield { kind: 'mkdir-local', local: join(root, relative) };
     }
 
-    const local = walkMode === 'remote' ? null : await listLocal(join(root, relative), relative);
-    const remote = walkMode === 'local' ? [] : await listRemote(target(relative)) ?? [];
+    const listing = listings.get(relative) ?? listFolder(relative, walkMode);
+    listings.delete(relative);
+    const { local, remote } = await listing;
 
     // Both sides are keyed by the path below the sync root, so they pair up
     // at every depth, not just at the root itself.
@@ -376,6 +490,58 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
     const remoteFiles = new Map(remote.filter(entry => entry.type === 'file').map(entry => [key(entry.name), entry] as const));
     const special = local?.special ?? new Set<string>();
     const names = [...new Set([...(local?.files.keys() ?? []), ...(local?.dirs ?? []), ...special, ...remoteDirs, ...remoteFiles.keys()])].sort();
+    const present = new Set(names);
+
+    // A file both sides have dropped since the last sync is forgotten.
+    for (const known of historyChildren.get(relative) ?? []) {
+      if (!present.has(known)) {
+        synced.delete(known);
+      }
+    }
+
+    // Whether one side's copy is still the one the last sync left on both sides.
+    const unchanged = (before: Synced, size: number | undefined, modifiedAt: number): boolean => size === before.size && modifiedAt === before.modifiedAt;
+
+    // The folders the loop below descends into, in its order, as the loop decides them.
+    const childMode = (name: string): WalkMode | null => {
+      const isDir = local?.dirs.has(name) ?? false;
+
+      if (special.has(name) || ((isDir || remoteDirs.has(name)) && (excluded(name) || !reachable(name)))) {
+        return null;
+      }
+
+      if (isDir && remoteDirs.has(name)) {
+        return 'pair';
+      }
+
+      if (!isDir && !local?.files.has(name) && remoteDirs.has(name)) {
+        return mode === 'upload' ? null : 'remote';
+      }
+
+      if (isDir && !remoteFiles.has(name) && mode !== 'download') {
+        return 'local';
+      }
+
+      return null;
+    };
+
+    const children = names.flatMap(name => {
+      const childWalk = childMode(name);
+      return childWalk ? [[name, childWalk] as const] : [];
+    });
+
+    let ahead = 0;
+    let entered = 0;
+
+    // Before entering a child folder, keep it and the next few listing in the background.
+    const enterChild = (): void => {
+      while (ahead < children.length && ahead <= entered + LISTINGS_AHEAD) {
+        listAhead(...children[ahead]!);
+        ahead += 1;
+      }
+
+      entered += 1;
+    };
 
     for (const name of names) {
       const file = local?.files.get(name);
@@ -403,6 +569,7 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
 
       // Folders on both sides.
       if (isDir && remoteDirs.has(name)) {
+        enterChild();
         yield* walk(name, 'pair');
         continue;
       }
@@ -421,6 +588,7 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
       // A folder only the remote holds: nothing local to send under it.
       if (!isDir && !file && remoteDirs.has(name)) {
         if (mode !== 'upload') {
+          enterChild();
           yield* walk(name, 'remote');
         }
 
@@ -429,6 +597,7 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
 
       // A folder only the local side holds.
       if (isDir && !entry && mode !== 'download') {
+        enterChild();
         yield* walk(name, 'local');
         continue;
       }
@@ -440,36 +609,49 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
         }
 
         const remoteAt = Date.parse(entry.modifiedAt);
+        const localAt = Math.floor(file.mtimeMs);
         let direction: 'upload' | 'download';
 
         // Identical files have nothing to send either way, even with --force.
-        if (Math.abs(file.mtimeMs - remoteAt) <= CLOCK_TOLERANCE_MS && file.size === entry.sizeBytes) {
+        if (sameModifiedTime(file.mtimeMs, entry.modifiedAt) && file.size === entry.sizeBytes) {
+          synced.set(name, { size: file.size, modifiedAt: remoteAt });
           report.skipped += 1;
           record({ path: target(name), action: 'skipped' });
           continue;
         }
+
+        // Which sides changed since the last sync left them the same, when it did.
+        const before = history.get(name);
+        const localChanged = before !== undefined && !unchanged(before, file.size, localAt);
+        const remoteChanged = before !== undefined && !unchanged(before, entry.sizeBytes, remoteAt);
 
         if (options.force) {
           direction = mode as 'upload' | 'download';
         } else if (!Number.isFinite(remoteAt)) {
           conflict(target(name), 'The remote file has no timestamp; pass --force to choose a side.');
           continue;
-        } else if (Math.abs(file.mtimeMs - remoteAt) <= CLOCK_TOLERANCE_MS) {
+        } else if (localChanged && remoteChanged) {
+          conflict(target(name), 'Both sides changed since the last sync; pass --force to choose one.');
+          continue;
+        } else if (localChanged !== remoteChanged) {
+          // The side that changed since the last sync wins, whatever the clocks say.
+          direction = localChanged ? 'upload' : 'download';
+        } else if (localAt === remoteAt) {
           conflict(target(name), 'Both sides changed at the same time with different sizes; pass --force to choose one.');
           continue;
         } else {
-          direction = file.mtimeMs > remoteAt ? 'upload' : 'download';
+          direction = localAt > remoteAt ? 'upload' : 'download';
+        }
 
-          if (mode !== 'both' && direction !== mode) {
-            if (file.size !== entry.sizeBytes) {
-              conflict(target(name), `The ${direction === 'upload' ? 'remote' : 'local'} side is newer with a different size; pass --force to replace it.`);
-            } else {
-              report.skipped += 1;
-              record({ path: target(name), action: 'skipped' });
-            }
-
-            continue;
+        if (!options.force && mode !== 'both' && direction !== mode) {
+          if (file.size !== entry.sizeBytes) {
+            conflict(target(name), `The ${direction === 'upload' ? 'local' : 'remote'} copy has the newer change, with a different size; pass --force to replace it.`);
+          } else {
+            report.skipped += 1;
+            record({ path: target(name), action: 'skipped' });
           }
+
+          continue;
         }
 
         if (direction === 'upload') {
@@ -479,37 +661,69 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
             conflict(target(name), 'The remote file has no version to guard its replacement.');
           } else {
             yield {
-              kind: 'upload', local: file.full, remote: target(name), bytes: file.size, replace: true, ifMatch: entry.version,
+              kind: 'upload', key: name, local: file.full, remote: target(name), bytes: file.size, modifiedAt: localAt, replace: true, ifMatch: entry.version,
             };
           }
         } else {
           yield {
-            kind: 'download', local: join(root, name), entry, bytes: entry.sizeBytes ?? 0, expected: file,
+            kind: 'download', key: name, local: join(root, name), entry, bytes: entry.sizeBytes ?? 0, expected: file,
           };
         }
       } else if (file) {
-        if (mode !== 'download' && accepted(name)) {
-          if (tooDeep(name)) {
-            conflict(target(name), 'The volume cannot hold a path this deep.');
-          } else {
-            yield {
-              kind: 'upload', local: file.full, remote: target(name), bytes: file.size, replace: false,
-            };
-          }
-        }
-      } else if (entry) {
-        // A remote staging name this CLI itself writes is never a file to keep.
-        if (PARTIAL_PATTERN.test(entry.name) || entry.name === '.featherless-uploads') {
-          report.skipped += 1;
-          record({ path: target(name), action: 'skipped', reason: 'A remote staging file from an interrupted transfer is not synchronized.' });
+        if (mode === 'download' || !accepted(name)) {
           continue;
         }
 
-        if (mode !== 'upload' && accepted(name)) {
+        const before = history.get(name);
+
+        // Deleted in the volume since the last sync: it stays deleted, unless it changed here since.
+        if (before && !options.force) {
+          if (unchanged(before, file.size, Math.floor(file.mtimeMs))) {
+            report.skipped += 1;
+            record({ path: target(name), action: 'skipped', reason: 'Deleted in the volume since the last sync.' });
+          } else {
+            conflict(target(name), 'Deleted in the volume and changed here since the last sync; pass --force to send it again.');
+          }
+
+          continue;
+        }
+
+        if (tooDeep(name)) {
+          conflict(target(name), 'The volume cannot hold a path this deep.');
+        } else {
           yield {
-            kind: 'download', local: join(root, name), entry, bytes: entry.sizeBytes ?? 0,
+            kind: 'upload', key: name, local: file.full, remote: target(name), bytes: file.size, modifiedAt: Math.floor(file.mtimeMs), replace: false,
           };
         }
+      } else if (entry) {
+        // A staging file — this CLI's, or an upload still in progress — is never a file to keep.
+        if (REMOTE_STAGING_PATTERN.test(entry.name) || entry.name === '.featherless-uploads') {
+          report.skipped += 1;
+          record({ path: target(name), action: 'skipped', reason: 'A staging file of an unfinished transfer is not synchronized.' });
+          continue;
+        }
+
+        if (mode === 'upload' || !accepted(name)) {
+          continue;
+        }
+
+        const before = history.get(name);
+
+        // Deleted on this computer since the last sync: it stays deleted, unless it changed in the volume since.
+        if (before && !options.force) {
+          if (unchanged(before, entry.sizeBytes, Date.parse(entry.modifiedAt))) {
+            report.skipped += 1;
+            record({ path: target(name), action: 'skipped', reason: 'Deleted on this computer since the last sync.' });
+          } else {
+            conflict(target(name), 'Deleted on this computer and changed in the volume since the last sync; pass --force to fetch it again.');
+          }
+
+          continue;
+        }
+
+        yield {
+          kind: 'download', key: name, local: join(root, name), entry, bytes: entry.sizeBytes ?? 0,
+        };
       }
     }
   }
@@ -597,6 +811,7 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
         return false;
       }
 
+      synced.set(task.key, { size: task.bytes, modifiedAt: task.modifiedAt });
       report.uploaded += 1;
       report.uploadedBytes += task.bytes;
       record({ path: task.remote, action: 'uploaded' });
@@ -642,6 +857,7 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
       return false;
     }
 
+    synced.set(task.key, { size: task.bytes, modifiedAt: Date.parse(task.entry.modifiedAt) });
     report.downloaded += 1;
     report.downloadedBytes += task.bytes;
     record({ path: task.entry.path, action: 'downloaded' });
@@ -721,6 +937,14 @@ export async function syncVolumeFolder(ctx: CliContext, { files, volumeName }: V
     process.stderr.write('\n');
   }
 
+  // Kept even when the walk failed: what did finish stays remembered for the next run.
+  if (!options.dryRun) {
+    const draft = `${historyFile}.${process.pid}.tmp`;
+    await mkdir(dirname(historyFile), { recursive: true });
+    await writeFile(draft, JSON.stringify({ files: Object.fromEntries(synced) }));
+    await rename(draft, historyFile);
+  }
+
   if (planFailed) {
     throw planFailure;
   }
@@ -747,12 +971,12 @@ export function registerVolumeSyncCommand(volume: CliCommand): void {
     .argument('<local-folder>', 'folder on this computer')
     .argument('<remote-folder>', 'vol://<volume>/<path> folder in the volume', { complete: volumePaths })
     .usage('[options] <local-folder> <vol://<volume>/<path>')
-    .description('Sync a folder with a folder in a volume, sending newer files each way; never deletes')
+    .description('Sync a folder with a folder in a volume, sending what changed each way; never deletes')
     .option('--mode <mode>', 'upload, download or both', 'both')
     .option('--dry-run', 'show what would be sent, received and created')
     .option('--mkdirs', 'create missing folders on either side')
     .option('--force', 'send even when the chosen side is older (needs --mode upload or --mode download)')
-    .option('--concurrency <n>', `files at a time, 1 to ${MAX_CONCURRENCY}`, '4')
+    .option('--concurrency <n>', `files at a time, 1 to ${MAX_CONCURRENCY}`, String(DEFAULT_CONCURRENCY))
     .option('--include <glob>', 'only relative paths matching a glob (*, ** and ?)', collect, [] as string[])
     .option('--exclude <glob>', 'skip relative paths matching a glob (*, ** and ?)', collect, [] as string[])
     .option('-v, --verbose', 'print each file as it syncs')

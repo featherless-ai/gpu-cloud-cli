@@ -38,6 +38,9 @@ class FakeFiles {
   lastMetadata: Record<string, string> | null = null;
   /** Versions listings report instead of the stored one, as a listing read before a change. */
   listVersions = new Map<string, string>();
+  listDelayMs = 0;
+  listingsInFlight = 0;
+  maxListingsInFlight = 0;
   findQuery: URLSearchParams | null = null;
   uploads = new Map<string, Upload>();
   /** Joins lanes, as file servers since parallel uploads; older ones ignore Upload-Concat. */
@@ -415,6 +418,11 @@ class FakeFiles {
     }
 
     if (url.pathname.endsWith('/files')) {
+      // A listing takes listDelayMs, as over a network, so listings sent at once overlap.
+      this.listingsInFlight += 1;
+      this.maxListingsInFlight = Math.max(this.maxListingsInFlight, this.listingsInFlight);
+      await new Promise(resolve => setTimeout(resolve, this.listDelayMs));
+      this.listingsInFlight -= 1;
       const folders = new Set<string>(this.dirs);
 
       for (const name of files.keys()) {
@@ -498,6 +506,8 @@ describe('FilesClient', () => {
     fake.dirs.clear();
     fake.lastMetadata = null;
     fake.listVersions.clear();
+    fake.listDelayMs = 0;
+    fake.maxListingsInFlight = 0;
     fake.uploads.clear();
     fake.requests = [];
     fake.sessions = 0;
@@ -592,6 +602,37 @@ describe('FilesClient', () => {
       expect(fake.joins).toBe(0);
       // It made the first lane a whole upload, which is dropped.
       expect(fake.requests).toContain(`DELETE /v1/uploads/${VOLUME}.0`);
+    });
+
+    it('sends large files at once without one losing its saved upload state', async () => {
+      fake.lanes = true;
+      await fs.writeFile(path.join(dir, 'a.bin'), content);
+      await fs.writeFile(path.join(dir, 'b.bin'), content);
+      const rename = fs.rename.bind(fs);
+      let held = false;
+
+      // The first save of the state file waits before it moves into place, as on a slow disk, so the
+      // other upload saves in between.
+      const spy = vi.spyOn(fs, 'rename').mockImplementation(async (from, to) => {
+        if (!held && String(to).endsWith('uploads.json')) {
+          held = true;
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+
+        return rename(from, to);
+      });
+
+      try {
+        await Promise.all([
+          client.upload(path.join(dir, 'a.bin'), 'a.bin', { mode: 'create', parents: false }),
+          client.upload(path.join(dir, 'b.bin'), 'b.bin', { mode: 'create', parents: false }),
+        ]);
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(fake.files.get('a.bin')?.data.equals(content)).toBe(true);
+      expect(fake.files.get('b.bin')?.data.equals(content)).toBe(true);
     });
 
     it('continues the lanes an earlier run left unfinished', async () => {
@@ -705,6 +746,32 @@ describe('FilesClient', () => {
       .rejects.toThrow('version guard');
 
     expect(fake.files.has('notes.txt')).toBe(false);
+  });
+
+  it('reads a folder for leftover partial downloads once, not once per file', async () => {
+    const out = path.join(dir, 'out');
+    await fs.mkdir(out);
+    // A partial download of another version, left by an earlier run.
+    await fs.writeFile(path.join(out, 'a.bin.0123456789ab.partial'), 'old');
+
+    for (const name of ['a.bin', 'b.bin', 'c.bin']) {
+      fake.files.set(name, { data: Buffer.from(name), modifiedAt: '2026-02-03T04:05:06.000Z', version: `${name}-version-0000` });
+    }
+
+    const entries = await client.list('');
+    const readdir = vi.spyOn(fs, 'readdir');
+
+    try {
+      for (const entry of entries) {
+        await client.download(entry, path.join(out, entry.name));
+      }
+
+      expect(readdir.mock.calls.filter(([folder]) => folder === out)).toHaveLength(1);
+    } finally {
+      readdir.mockRestore();
+    }
+
+    await expect(fs.readdir(out).then(names => names.sort())).resolves.toEqual(['a.bin', 'b.bin', 'c.bin']);
   });
 
   it('resumes a dropped download with a range and only then shows the whole file', async () => {
@@ -1002,8 +1069,34 @@ describe('FilesClient', () => {
       await fs.utimes(path.join(local, name), new Date(at), new Date(at));
     };
 
+    let home: string | undefined;
+
     beforeEach(() => {
       local = path.join(dir, 'local');
+      // Sync keeps what it last saw below the config folder, which comes from HOME.
+      home = process.env.HOME;
+      process.env.HOME = dir;
+    });
+
+    afterEach(() => {
+      if (home === undefined) {
+        delete process.env.HOME;
+      } else {
+        process.env.HOME = home;
+      }
+    });
+
+    it('syncs a folder reached through a symlinked parent, refusing a symlinked folder itself', async () => {
+      await put('a.txt', 'x', '2026-02-01T00:00:00Z');
+      await fs.symlink(dir, path.join(dir, 'alias'));
+
+      const report = await syncVolumeFolder(ctx, data, path.join(dir, 'alias', 'local'), '', {});
+
+      expect(report.uploaded).toBe(1);
+
+      await fs.symlink(local, path.join(dir, 'link'));
+
+      await expect(syncVolumeFolder(ctx, data, path.join(dir, 'link'), '', {})).rejects.toThrow('not a real folder');
     });
 
     it('sends newer local files and receives newer remote ones', async () => {
@@ -1271,6 +1364,33 @@ describe('FilesClient', () => {
       expect(await fs.stat(path.join(local, 'b.bin.abcdef123456.partial')).catch(() => null)).toBeNull();
     });
 
+    it('lists folders ahead of the walk, several at once', async () => {
+      for (let index = 0; index < 12; index++) {
+        await put(`part-${index}/a.txt`, 'same', '2026-02-01T00:00:00Z');
+        fake.files.set(`part-${index}/a.txt`, stored('same', '2026-02-01T00:00:00.000Z', `v${index}`));
+      }
+
+      fake.listDelayMs = 20;
+
+      const report = await syncVolumeFolder(ctx, data, local, '', {});
+
+      expect(report.skipped).toBe(12);
+      expect(fake.maxListingsInFlight).toBeGreaterThan(1);
+      // Listings stay under the file server's limit of 32 a second at prod's round trip.
+      expect(fake.maxListingsInFlight).toBeLessThanOrEqual(6);
+    });
+
+    it('leaves another client\'s unfinished upload out of the sync', async () => {
+      // The file server stages an upload as <name>.<first 8 hex of its id>.partial until it finishes.
+      fake.files.set('a.txt', stored('a', '2026-03-01T00:00:00.000Z', 'v1'));
+      fake.files.set('b.bin.96f44e9f.partial', stored('half', '2026-03-01T00:00:00.000Z', 'v2'));
+
+      const report = await syncVolumeFolder(ctx, data, local, '', { mkdirs: true, mode: 'download' });
+
+      expect(report.downloaded).toBe(1);
+      expect(await fs.stat(path.join(local, 'b.bin.96f44e9f.partial')).catch(() => null)).toBeNull();
+    });
+
     it('shows what it would do without writing', async () => {
       await put('a.txt', 'new', '2026-02-01T00:00:00Z');
       fake.files.set('a.txt', stored('old', '2026-01-01T00:00:00.000Z', 'v1'));
@@ -1313,6 +1433,137 @@ describe('FilesClient', () => {
       expect(report.uploaded).toBe(1);
       expect(report.skipped).toBe(1);
       expect(report.actions.some(action => action.reason === 'A local symlink or special file is not synchronized.')).toBe(true);
+    });
+
+    it('calls a file changed on both sides since the last sync a conflict, whichever is newer', async () => {
+      await put('a.txt', 'first', '2026-01-01T00:00:00Z');
+      await syncVolumeFolder(ctx, data, local, '', {});
+      fake.files.set('a.txt', stored('remote edit', '2026-02-01T00:00:00.000Z', 'v9'));
+      await put('a.txt', 'local edit', '2026-03-01T00:00:00Z');
+
+      const report = await syncVolumeFolder(ctx, data, local, '', {});
+
+      expect(report.conflicts).toBe(1);
+      expect(report.uploaded + report.downloaded).toBe(0);
+      expect(fake.files.get('a.txt')?.data.toString()).toBe('remote edit');
+      await expect(fs.readFile(path.join(local, 'a.txt'), 'utf8')).resolves.toBe('local edit');
+    });
+
+    it('sends a change made since the last sync even when its clock is behind the other side', async () => {
+      await put('a.txt', 'first', '2026-02-01T00:00:00Z');
+      await syncVolumeFolder(ctx, data, local, '', {});
+      // Edited on a computer whose clock runs a day behind.
+      await put('a.txt', 'local edit', '2026-01-31T00:00:00Z');
+
+      const report = await syncVolumeFolder(ctx, data, local, '', {});
+
+      expect(report.uploaded).toBe(1);
+      expect(report.downloaded).toBe(0);
+      expect(fake.files.get('a.txt')?.data.toString()).toBe('local edit');
+    });
+
+    it('leaves a file deleted on one side since the last sync deleted, keeping the other copy', async () => {
+      await put('local-gone.txt', 'x', '2026-02-01T00:00:00Z');
+      await put('remote-gone.txt', 'y', '2026-02-01T00:00:00Z');
+      await syncVolumeFolder(ctx, data, local, '', {});
+      await fs.rm(path.join(local, 'local-gone.txt'));
+      fake.files.delete('remote-gone.txt');
+
+      const report = await syncVolumeFolder(ctx, data, local, '', {});
+
+      expect(report.uploaded + report.downloaded).toBe(0);
+      expect(report.conflicts).toBe(0);
+      expect(await fs.stat(path.join(local, 'local-gone.txt')).catch(() => null)).toBeNull();
+      expect(fake.files.has('remote-gone.txt')).toBe(false);
+      expect(fake.files.has('local-gone.txt')).toBe(true);
+      await expect(fs.readFile(path.join(local, 'remote-gone.txt'), 'utf8')).resolves.toBe('y');
+    });
+
+    it('calls a file deleted on one side and changed on the other since the last sync a conflict', async () => {
+      await put('a.txt', 'x', '2026-02-01T00:00:00Z');
+      await syncVolumeFolder(ctx, data, local, '', {});
+      await fs.rm(path.join(local, 'a.txt'));
+      fake.files.set('a.txt', stored('remote edit', '2026-03-01T00:00:00.000Z', 'v9'));
+
+      const report = await syncVolumeFolder(ctx, data, local, '', {});
+
+      expect(report.conflicts).toBe(1);
+      expect(report.downloaded).toBe(0);
+      expect(await fs.stat(path.join(local, 'a.txt')).catch(() => null)).toBeNull();
+    });
+
+    it('does not recreate a folder deleted on one side since the last sync', async () => {
+      await put('sub/a.txt', 'x', '2026-02-01T00:00:00Z');
+      await syncVolumeFolder(ctx, data, local, 'remote', { mkdirs: true });
+      await fs.rm(path.join(local, 'sub'), { recursive: true });
+
+      const report = await syncVolumeFolder(ctx, data, local, 'remote', { mkdirs: true });
+
+      expect(report.directories).toBe(0);
+      expect(report.downloaded).toBe(0);
+      expect(await fs.stat(path.join(local, 'sub')).catch(() => null)).toBeNull();
+    });
+
+    it('matches a pattern without a slash at any depth, skipping a folder it names whole', async () => {
+      await put('app.log', 'x', '2026-02-01T00:00:00Z');
+      await put('logs/app.log', 'x', '2026-02-01T00:00:00Z');
+      await put('node_modules/x.js', 'x', '2026-02-01T00:00:00Z');
+      await put('web/node_modules/react/index.js', 'x', '2026-02-01T00:00:00Z');
+      await put('src/main.ts', 'x', '2026-02-01T00:00:00Z');
+
+      const report = await syncVolumeFolder(ctx, data, local, 'remote', { exclude: ['node_modules', '*.log'], mkdirs: true });
+
+      expect(report.uploaded).toBe(1);
+      expect(fake.files.has('remote/src/main.ts')).toBe(true);
+      expect(fake.dirs.has('remote/node_modules')).toBe(false);
+      expect(fake.dirs.has('remote/web/node_modules')).toBe(false);
+    });
+
+    it('skips a folder a **/ pattern names, at the root and below', async () => {
+      await put('node_modules/x.js', 'x', '2026-02-01T00:00:00Z');
+      await put('web/node_modules/react/index.js', 'x', '2026-02-01T00:00:00Z');
+      await put('web/app.js', 'x', '2026-02-01T00:00:00Z');
+
+      const report = await syncVolumeFolder(ctx, data, local, 'remote', { exclude: ['**/node_modules'], mkdirs: true });
+
+      expect(report.uploaded).toBe(1);
+      expect(fake.files.has('remote/web/app.js')).toBe(true);
+      expect(fake.dirs.has('remote/node_modules')).toBe(false);
+      expect(fake.dirs.has('remote/web/node_modules')).toBe(false);
+    });
+
+    it('syncs a tree of more than 100,000 entries', async () => {
+      const many = path.join(local, 'many');
+      await fs.mkdir(many, { recursive: true });
+
+      for (let start = 0; start <= 100_000; start += 1_000) {
+        const count = Math.min(1_000, 100_001 - start);
+        const names = Array.from({ length: count }, (_, index) => path.join(many, `${start + index}.bin`));
+        await Promise.all(names.map(name => fs.writeFile(name, '')));
+      }
+
+      const report = await syncVolumeFolder(ctx, data, local, '', { mkdirs: true, dryRun: true });
+
+      expect(report.planned).toBe(100_001);
+    }, 120_000);
+
+    it('calls files a millisecond apart different and within one millisecond the same, as cp --update does', async () => {
+      fake.files.set('apart.txt', stored('same', '2026-02-01T00:00:00.000Z', 'v1'));
+      fake.files.set('within.txt', stored('same', '2026-02-01T00:00:00.000Z', 'v2'));
+      await put('apart.txt', 'same', '2026-02-01T00:00:00Z');
+      await put('within.txt', 'same', '2026-02-01T00:00:00Z');
+      // The local clock keeps time below a millisecond; the volume keeps whole milliseconds. Node on
+      // Linux sets times up to a microsecond early, so neither lands near a millisecond boundary.
+      const apart = (Date.parse('2026-02-01T00:00:00Z') + 1.5) / 1000;
+      const within = (Date.parse('2026-02-01T00:00:00Z') + 0.4) / 1000;
+      await fs.utimes(path.join(local, 'apart.txt'), apart, apart);
+      await fs.utimes(path.join(local, 'within.txt'), within, within);
+
+      const report = await syncVolumeFolder(ctx, data, local, '', {});
+
+      expect(report.uploaded).toBe(1);
+      expect(report.skipped).toBe(1);
+      expect(report.actions).toContainEqual({ path: 'apart.txt', action: 'uploaded' });
     });
   });
 });

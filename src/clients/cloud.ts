@@ -290,8 +290,8 @@ export class CloudClient {
   }
 
   /** Returns the HTTP status; the 202 body is empty. */
-  async deleteVolume(id: string): Promise<number> {
-    return this.requestWithStatus('DELETE', `/volumes/${encodeURIComponent(id)}`);
+  async deleteVolume(id: string, detach = false): Promise<number> {
+    return this.requestWithStatus('DELETE', `/volumes/${encodeURIComponent(id)}${detach ? '?detach=true' : ''}`);
   }
 
   async listJobs(opts: { page: number; limit: number }): Promise<RunJobListResponse> {

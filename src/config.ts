@@ -25,7 +25,7 @@ export interface ResolvedAuth {
 }
 
 // The compiled binary targets the public cloud; running from source targets
-// the local Docker Compose stack.
+// the main checkout's development environment.
 export function apiBaseUrl(): string {
   return IS_BINARY ? 'https://api.cloud.featherless.ai' : 'http://localhost:3001';
 }

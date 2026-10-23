@@ -263,6 +263,17 @@ describe('resolveCompute', () => {
     const resolved = await resolveCompute(plain, { computeType: 'gpu' }, ctx());
     expect(resolved).toEqual({ computeSku: 'gpu.mi325x.1x' });
   });
+
+  it('defaults a bare count to the in-service model among priced offers', async () => {
+    const catalog = [
+      gpuRate('gpu.mi325x.1x', 1, 'MI325X'),
+      gpuRate('gpu.b300.1x', 1, 'B300'),
+      gpuRate('gpu.h100.1x', 1, 'H100'),
+    ];
+
+    const resolved = await resolveCompute(catalog, { computeType: 'gpu' }, ctx());
+    expect(resolved).toEqual({ computeSku: 'gpu.mi325x.1x' });
+  });
 });
 
 describe('resolveImage', () => {

@@ -17,15 +17,20 @@ export function registerVolumeDeleteCommand(parent: CliCommand): void {
       const auth = await resolveAuth(options.profile);
       const client = new CloudClient(auth.apiBase, auth.apiKey);
 
-      await requireDeletion(ctx, `volume ${id}`, Boolean(options.yes));
-
-      const volume = await ctx.spin('Deleting volume', async () => {
+      const volume = await ctx.spin('Finding volume', async () => {
         const volumes = await client.listVolumes();
-        const current = await client.getVolume(findVolume(volumes, id).id);
-        await client.deleteVolume(current.id);
-
-        return current;
+        return client.getVolume(findVolume(volumes, id).id);
       });
+
+      const attached = volume.attachments;
+
+      if (attached.length) {
+        const list = attached.map(attachment => `  ${attachment.name}  ${attachment.mountPath}`).join('\n');
+        ctx.warn(`Attached to:\n${list}\nDeleting detaches it from these instances, which must be stopped. They'll start without it, and files written to those paths won't be kept.`);
+      }
+
+      await requireDeletion(ctx, `volume ${volume.name}`, Boolean(options.yes));
+      await ctx.spin('Deleting volume', () => client.deleteVolume(volume.id, attached.length > 0));
 
       ctx.success(`Volume deletion started for ${volume.name}.`);
     });

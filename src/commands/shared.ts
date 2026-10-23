@@ -149,9 +149,14 @@ function resolveGpuSku(prices: PriceRate[], gpuType: string | undefined, gpuCoun
       (rate.resources?.gpuModel ?? rate.displayName).toLowerCase().includes(needle));
   }
 
-  if (candidates.length === 0) {
-    const typed = gpuType ? ` matching "${gpuType}"` : '';
-    throw new CliError(`No GPU offer${typed} with ${gpuCount} GPU(s). Run featherless-cloud pricing list.`);
+  if (candidates.length > 1 && !gpuType) {
+    // Priced models the fleet may not stock yet make bare --gpu-count ambiguous;
+    // default to the in-service model, as the console does.
+    const stocked = candidates.filter(rate => /mi[-_ ]?325/i.test(rate.resources?.gpuModel ?? ''));
+
+    if (stocked.length === 1) {
+      candidates = stocked;
+    }
   }
 
   if (candidates.length > 1) {
