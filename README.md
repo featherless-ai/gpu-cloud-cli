@@ -214,17 +214,6 @@ Add credit and set up auto-reload under [Billing](https://console.cloud.featherl
 featherless-cloud instance list --json | jq -r '.items[].name'
 ```
 
-## Updates
-
-The CLI checks for a new version once a day and installs it in the background. You'll see
-"Updated featherless-cloud to X" the next time you run it.
-
-- Run `featherless-cloud upgrade` to update straight away.
-- If the background install can't run (for example, the global npm folder needs `sudo`), you'll
-  see "Update available" instead. Run `featherless-cloud upgrade`, with `sudo` if your npm needs it.
-- Set `FEATHERLESS_CLOUD_DISABLE_AUTOUPDATE=1` to turn automatic installs off.
-- Uninstall with `npm uninstall --global @featherlessai/gpu-cloud-cli`.
-
 ## Shell completion
 
 Bash:
