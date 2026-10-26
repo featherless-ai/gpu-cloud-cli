@@ -26,13 +26,13 @@ import { volumePaths } from '../src/commands/volume/files';
 import type { CloudClient } from '../src/clients/cloud';
 import { FilesClient, type FileEntry } from '../src/clients/files';
 import { loadConfig } from '../src/config';
-import { registerCompletionCommand } from '../src/commands/completion';
-import { registerExecCommand } from '../src/commands/exec';
-import { registerInstanceCommand } from '../src/commands/instance';
-import { registerJobCommand } from '../src/commands/job';
-import { registerLoginCommand } from '../src/commands/login';
-import { registerPricingCommand } from '../src/commands/pricing';
-import { registerVolumeCommand } from '../src/commands/volume';
+import { completeCommand, completionCommand } from '../src/commands/completion';
+import { execCommand } from '../src/commands/exec';
+import { instanceCommand } from '../src/commands/instance';
+import { jobCommand } from '../src/commands/job';
+import { loginCommand } from '../src/commands/login';
+import { pricingCommand } from '../src/commands/pricing';
+import { volumeCommand } from '../src/commands/volume';
 
 vi.mock('../src/clients/files', async importOriginal => ({ ...await importOriginal<typeof import('../src/clients/files')>(), FilesClient: vi.fn() }));
 vi.mock('../src/config', async importOriginal => ({ ...await importOriginal<typeof import('../src/config')>(), loadConfig: vi.fn() }));
@@ -405,13 +405,15 @@ describe('shared completers', () => {
 describe('declared completers', () => {
   const program = new CliCommand('featherless-cloud');
 
-  registerLoginCommand(program);
-  registerInstanceCommand(program);
-  registerVolumeCommand(program);
-  registerPricingCommand(program);
-  registerJobCommand(program);
-  registerExecCommand(program);
-  registerCompletionCommand(program);
+  program
+    .addCommand(loginCommand)
+    .addCommand(instanceCommand)
+    .addCommand(volumeCommand)
+    .addCommand(pricingCommand)
+    .addCommand(jobCommand)
+    .addCommand(execCommand)
+    .addCommand(completionCommand)
+    .addCommand(completeCommand, { hidden: true });
 
   const tree = commandTree(program);
   const node = (command: string) => command.split(' ').reduce((current, name) => current.commands.find(child => child.name === name)!, tree);

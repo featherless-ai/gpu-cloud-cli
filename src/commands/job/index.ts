@@ -1,17 +1,14 @@
-import type { CliCommand } from '../../completions';
-import { registerJobListCommand } from './list';
-import { registerJobGetCommand } from './get';
-import { registerJobLogsCommand } from './logs';
-import { registerJobActionCommands } from './action';
+import { CliCommand } from '../../completions';
+import { jobListCommand } from './list';
+import { jobGetCommand } from './get';
+import { jobLogsCommand } from './logs';
+import { jobCancelCommand, jobDeleteCommand } from './action';
 
-export function registerJobCommand(parent: CliCommand): void {
-  const job = parent
-    .command('runjob')
-    .alias('job')
-    .description('Run and manage Run Jobs');
-
-  registerJobListCommand(job);
-  registerJobGetCommand(job);
-  registerJobLogsCommand(job);
-  registerJobActionCommands(job);
-}
+export const jobCommand = new CliCommand('runjob')
+  .alias('job')
+  .description('Run and manage Run Jobs')
+  .addCommand(jobListCommand)
+  .addCommand(jobGetCommand)
+  .addCommand(jobLogsCommand)
+  .addCommand(jobCancelCommand)
+  .addCommand(jobDeleteCommand);

@@ -4,7 +4,7 @@ import {
   afterEach, beforeEach, describe, expect, it, vi,
 } from 'vitest';
 import { sshArgs, runSsh, tmuxCommand, validateSessionName } from '../src/commands/instance/ssh';
-import { registerInstanceCommand } from '../src/commands/instance';
+import { instanceCommand } from '../src/commands/instance';
 import { CliCommand, commandTree } from '../src/completions';
 import { resolveAuth } from '../src/config';
 import { CloudClient } from '../src/clients/cloud';
@@ -23,9 +23,7 @@ const instance = {
 } as InstanceDto;
 
 function program(): CliCommand {
-  const root = new CliCommand('featherless-cloud').option('--json');
-  registerInstanceCommand(root);
-  return root;
+  return new CliCommand('featherless-cloud').option('--json').addCommand(instanceCommand);
 }
 
 describe('native SSH argv', () => {

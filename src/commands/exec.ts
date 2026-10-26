@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import type { CliCommand } from '../completions';
+import { CliCommand } from '../completions';
 import { CloudClient, type CreateRunJobBody } from '../clients/cloud';
 import { resolveAuth } from '../config';
 import { createContext } from '../context';
@@ -203,121 +203,120 @@ async function attach(client: CloudClient, initial: RunJobDto, cancelOnInterrupt
   }
 }
 
-export function registerExecCommand(parent: CliCommand): void {
-  parent.command('exec [command...]')
-    .description('Run a command on temporary CPU or GPU compute')
-    .option('--name <name>', 'Run Job name (random when omitted)')
-    .option('--template <name|id>', 'published template; defaults to the PyTorch environment', { complete: templates })
-    .option('--image <reference>', 'custom container image instead of a template')
-    .option('--registry <name|id>', 'registry credential for a private --image', { complete: registries })
-    .option('--gpu-type <text>', 'GPU model substring, e.g. mi325x', { complete: gpuTypes('run-job') })
-    .option('--gpu-count <n>', 'GPUs: 1, 2, 4, or 8', { complete: gpuCounts('run-job') })
-    .option('--cpu-cores <n>', 'vCPU cores; mutually exclusive with GPU options', { complete: cpuCores('run-job') })
-    .option('--disk <gb>', 'container disk in GB (20-2000)', '20')
-    .option('--volume <name:path>', 'mount a network volume, repeatable', { parse: (v: string, prev: string[]) => [...prev, v], defaultValue: [], complete: volumeMounts })
-    .option('--workdir <path>', 'container working directory', '/workspace')
-    .option('--env <K=V>', 'environment variable, repeatable', (v: string, prev: string[]) => [...prev, v], [])
-    .option('--secret <K=V>', 'secret variable, repeatable', (v: string, prev: string[]) => [...prev, v], [])
-    .option('--timeout <seconds>', 'run time limit after compute assignment (1-86400)', '86400')
-    .option('--preemption-retries <n>', 'start again from the beginning up to n times if interrupted for other work (0-3)', { defaultValue: '0', complete: () => ['0', '1', '2', '3'] })
-    .option('--no-retain-logs', 'disable output collection, including live attached output')
-    .option('--idempotency-key <key>', 'retry-safe execution key (random when omitted)')
-    .option('--detach', 'submit without waiting for the result')
-    .option('--cancel-on-interrupt', 'cancel instead of detach when Ctrl-C is pressed')
-    .option('--profile <name>', 'authentication profile to use', { complete: profiles })
-    .addHelpText('after', '\nExamples:\n  featherless-cloud exec --gpu-count 1 -- python -c \'import torch; print(torch.cuda.is_available())\'\n  featherless-cloud exec --cpu-cores 32 -- python -c \'import os; print(os.cpu_count())\'')
-    .action(async (command: string[], options: ExecOptions, cmd: Command) => {
-      if (command.length === 0) {
-        throw new CliError('Provide the command after --.');
-      }
+export const execCommand = new CliCommand('exec')
+  .argument('[command...]')
+  .description('Run a command on temporary CPU or GPU compute')
+  .option('--name <name>', 'Run Job name (random when omitted)')
+  .option('--template <name|id>', 'published template; defaults to the PyTorch environment', { complete: templates })
+  .option('--image <reference>', 'custom container image instead of a template')
+  .option('--registry <name|id>', 'registry credential for a private --image', { complete: registries })
+  .option('--gpu-type <text>', 'GPU model substring, e.g. mi325x', { complete: gpuTypes('run-job') })
+  .option('--gpu-count <n>', 'GPUs: 1, 2, 4, or 8', { complete: gpuCounts('run-job') })
+  .option('--cpu-cores <n>', 'vCPU cores; mutually exclusive with GPU options', { complete: cpuCores('run-job') })
+  .option('--disk <gb>', 'container disk in GB (20-2000)', '20')
+  .option('--volume <name:path>', 'mount a network volume, repeatable', { parse: (v: string, prev: string[]) => [...prev, v], defaultValue: [], complete: volumeMounts })
+  .option('--workdir <path>', 'container working directory', '/workspace')
+  .option('--env <K=V>', 'environment variable, repeatable', (v: string, prev: string[]) => [...prev, v], [])
+  .option('--secret <K=V>', 'secret variable, repeatable', (v: string, prev: string[]) => [...prev, v], [])
+  .option('--timeout <seconds>', 'run time limit after compute assignment (1-86400)', '86400')
+  .option('--preemption-retries <n>', 'start again from the beginning up to n times if interrupted for other work (0-3)', { defaultValue: '0', complete: () => ['0', '1', '2', '3'] })
+  .option('--no-retain-logs', 'disable output collection, including live attached output')
+  .option('--idempotency-key <key>', 'retry-safe execution key (random when omitted)')
+  .option('--detach', 'submit without waiting for the result')
+  .option('--cancel-on-interrupt', 'cancel instead of detach when Ctrl-C is pressed')
+  .option('--profile <name>', 'authentication profile to use', { complete: profiles })
+  .addHelpText('after', '\nExamples:\n  featherless-cloud exec --gpu-count 1 -- python -c \'import torch; print(torch.cuda.is_available())\'\n  featherless-cloud exec --cpu-cores 32 -- python -c \'import os; print(os.cpu_count())\'')
+  .action(async (command: string[], options: ExecOptions, cmd: Command) => {
+    if (command.length === 0) {
+      throw new CliError('Provide the command after --.');
+    }
 
-      if (options.cpuCores && (options.gpuCount || options.gpuType)) {
-        throw new CliError('--cpu-cores cannot be combined with GPU options.');
-      }
+    if (options.cpuCores && (options.gpuCount || options.gpuType)) {
+      throw new CliError('--cpu-cores cannot be combined with GPU options.');
+    }
 
-      const ctx = createContext(cmd);
+    const ctx = createContext(cmd);
 
-      if (ctx.mode === 'json' && !options.detach) {
-        throw new CliError('--json can only be used with --detach; attached stdout is reserved for command output.');
-      }
+    if (ctx.mode === 'json' && !options.detach) {
+      throw new CliError('--json can only be used with --detach; attached stdout is reserved for command output.');
+    }
 
-      const auth = await resolveAuth(options.profile);
-      const client = new CloudClient(auth.apiBase, auth.apiKey);
-      const name = options.name ?? randomInstanceName();
-      assertInstanceName(name);
+    const auth = await resolveAuth(options.profile);
+    const client = new CloudClient(auth.apiBase, auth.apiKey);
+    const name = options.name ?? randomInstanceName();
+    assertInstanceName(name);
 
-      const [pricing, templates, volumes, credentials] = await ctx.spin('Loading execution options', () => Promise.all([
-        client.pricing('run-job'),
-        options.template ? client.templates() : Promise.resolve([]),
-        options.volume?.length ? client.listVolumes() : Promise.resolve([]),
-        options.image && options.registry ? client.registryCredentials() : Promise.resolve([]),
-      ]));
+    const [pricing, templates, volumes, credentials] = await ctx.spin('Loading execution options', () => Promise.all([
+      client.pricing('run-job'),
+      options.template ? client.templates() : Promise.resolve([]),
+      options.volume?.length ? client.listVolumes() : Promise.resolve([]),
+      options.image && options.registry ? client.registryCredentials() : Promise.resolve([]),
+    ]));
 
-      const image = options.template || options.image || options.registry
-        ? resolveImage(templates, credentials, options)
-        : {};
+    const image = options.template || options.image || options.registry
+      ? resolveImage(templates, credentials, options)
+      : {};
 
-      const compute = await resolveCompute(pricing, {
-        computeType: options.cpuCores ? 'cpu' : 'gpu',
-        gpuType: options.gpuType,
-        gpuCount: options.gpuCount,
-        cpuCores: options.cpuCores,
-        interactive: false,
-      }, ctx);
+    const compute = await resolveCompute(pricing, {
+      computeType: options.cpuCores ? 'cpu' : 'gpu',
+      gpuType: options.gpuType,
+      gpuCount: options.gpuCount,
+      cpuCores: options.cpuCores,
+      interactive: false,
+    }, ctx);
 
-      const mounts = parseVolumeFlags(options.volume).map(entry => ({
-        networkVolumeId: resolveVolume(volumes, entry.volume),
-        mountPath: entry.mountPath,
-      }));
+    const mounts = parseVolumeFlags(options.volume).map(entry => ({
+      networkVolumeId: resolveVolume(volumes, entry.volume),
+      mountPath: entry.mountPath,
+    }));
 
-      if (mounts.length > 8) {
-        throw new CliError('At most 8 network volumes can be mounted.');
-      }
+    if (mounts.length > 8) {
+      throw new CliError('At most 8 network volumes can be mounted.');
+    }
 
-      validateMounts(mounts);
+    validateMounts(mounts);
 
-      const body: CreateRunJobBody = {
-        name,
-        ...image,
-        ...compute,
-        command,
-        ephemeralDiskGiB: boundedInteger(options.disk, 'Container disk', 20, 2000),
-        workingDirectory: options.workdir,
-        timeoutSeconds: boundedInteger(options.timeout, 'Timeout', 1, 86_400),
-        preemptionRetries: boundedInteger(options.preemptionRetries, 'Preemption retries', 0, 3),
-        retainLogs: options.retainLogs,
-      };
+    const body: CreateRunJobBody = {
+      name,
+      ...image,
+      ...compute,
+      command,
+      ephemeralDiskGiB: boundedInteger(options.disk, 'Container disk', 20, 2000),
+      workingDirectory: options.workdir,
+      timeoutSeconds: boundedInteger(options.timeout, 'Timeout', 1, 86_400),
+      preemptionRetries: boundedInteger(options.preemptionRetries, 'Preemption retries', 0, 3),
+      retainLogs: options.retainLogs,
+    };
 
-      if (mounts.length) {
-        body.networkVolumeMounts = mounts;
-      }
+    if (mounts.length) {
+      body.networkVolumeMounts = mounts;
+    }
 
-      const environment = toEnvironment(parseRepeatable(options.env, 'env'));
+    const environment = toEnvironment(parseRepeatable(options.env, 'env'));
 
-      if (environment.length) {
-        body.environment = environment;
-      }
+    if (environment.length) {
+      body.environment = environment;
+    }
 
-      const secrets = toEnvironment(parseRepeatable(options.secret, 'secret'));
+    const secrets = toEnvironment(parseRepeatable(options.secret, 'secret'));
 
-      if (secrets.length) {
-        body.secrets = secrets;
-      }
+    if (secrets.length) {
+      body.secrets = secrets;
+    }
 
-      const job = await ctx.spin('Starting command', () => client.createJob(
-        body,
-        options.idempotencyKey ?? crypto.randomUUID(),
-      ));
+    const job = await ctx.spin('Starting command', () => client.createJob(
+      body,
+      options.idempotencyKey ?? crypto.randomUUID(),
+    ));
 
-      if (options.detach) {
-        ctx.output(job, item => ({ text: item.shortId }));
-        return;
-      }
+    if (options.detach) {
+      ctx.output(job, item => ({ text: item.shortId }));
+      return;
+    }
 
-      const completed = await attach(client, job, Boolean(options.cancelOnInterrupt));
+    const completed = await attach(client, job, Boolean(options.cancelOnInterrupt));
 
-      if (TERMINAL_STATES.has(completed.state)) {
-        process.exitCode = remoteExitCode(completed);
-      }
-    });
-}
+    if (TERMINAL_STATES.has(completed.state)) {
+      process.exitCode = remoteExitCode(completed);
+    }
+  });

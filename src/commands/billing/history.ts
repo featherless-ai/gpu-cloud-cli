@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import type { CliCommand } from '../../completions';
+import { CliCommand } from '../../completions';
 import { profiles } from '../shared';
 import { createContext } from '../../context';
 import { resolveAuth } from '../../config';
@@ -44,29 +44,26 @@ function amount(micros: string): string {
   return Number(micros) > 0 ? `+${dollars}` : dollars;
 }
 
-export function registerBillingHistoryCommand(parent: CliCommand): void {
-  parent
-    .command('history')
-    .description('List charges and top-ups')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .action(async (options: { profile?: string }, cmd: Command) => {
-      const ctx = createContext(cmd);
-      const auth = await resolveAuth(options.profile);
-      const client = new CloudClient(auth.apiBase, auth.apiKey);
+export const billingHistoryCommand = new CliCommand('history')
+  .description('List charges and top-ups')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .action(async (options: { profile?: string }, cmd: Command) => {
+    const ctx = createContext(cmd);
+    const auth = await resolveAuth(options.profile);
+    const client = new CloudClient(auth.apiBase, auth.apiKey);
 
-      const ledger = await ctx.spin('Fetching history', () => client.billingLedger());
+    const ledger = await ctx.spin('Fetching history', () => client.billingLedger());
 
-      ctx.output(ledger, (page: PaginatedLedger) => ({
-        table: {
-          header: ['DATE', 'TYPE', 'DESCRIPTION', 'AMOUNT'],
-          rows: page.items.map(entry => [
-            entryDate(entry),
-            entry.type,
-            entryDescription(entry),
-            amount(entry.amountMicros),
-          ]),
-        },
-        footer: `${page.items.length} of ${page.pagination.totalItems} entry(s)`,
-      }));
-    });
-}
+    ctx.output(ledger, (page: PaginatedLedger) => ({
+      table: {
+        header: ['DATE', 'TYPE', 'DESCRIPTION', 'AMOUNT'],
+        rows: page.items.map(entry => [
+          entryDate(entry),
+          entry.type,
+          entryDescription(entry),
+          amount(entry.amountMicros),
+        ]),
+      },
+      footer: `${page.items.length} of ${page.pagination.totalItems} entry(s)`,
+    }));
+  });

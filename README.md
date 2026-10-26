@@ -59,7 +59,7 @@ featherless-cloud instance delete train
 ```
 
 - **Image:** `--template <name>` for a published template, or `--image <reference>` for your own
-  container (add `--registry <name>` for a private one).
+  container (add `--registry <name>` for a private one, see [Private images](#private-images)).
 - **Compute:** `--gpu-type` and `--gpu-count` (1, 2, 4 or 8), or `--compute-type cpu --cpu-cores <n>`.
 - **Storage:** `--disk <gb>` for the container disk; `--volume <name>:<path>` mounts a network volume.
 - **Settings:** `--env K=V` and `--secret K=V`, both repeatable.
@@ -96,9 +96,16 @@ featherless-cloud instance tmux train       # attach to the default tmux session
 featherless-cloud instance tmux train eval  # or create/attach a named one
 ```
 
-`ssh` and `tmux` need `ssh` installed and your public key added under
-[SSH keys](https://console.cloud.featherless.ai/credentials/ssh-keys). Your SSH config and agent
-apply as usual; `-i <file>` picks a key.
+`ssh` and `tmux` need `ssh` installed and your public key added:
+
+```sh
+featherless-cloud ssh-keys add                     # ~/.ssh/id_ed25519.pub (or id_ecdsa, id_rsa)
+featherless-cloud ssh-keys add ~/.ssh/work.pub --name work
+featherless-cloud ssh-keys list
+featherless-cloud ssh-keys delete work
+```
+
+Your SSH config and agent apply as usual; `-i <file>` picks a key.
 
 ### Keeping work running with tmux
 
@@ -129,6 +136,20 @@ featherless-cloud runjob cancel nightly
   `--cancel-on-interrupt` cancels instead.
 - `--timeout <seconds>` caps the run time (default 24 hours).
 - `--idempotency-key <key>` makes a retried `exec` reuse the first Run Job.
+
+## Private images
+
+Add the registry login once, then pass its name with `--registry`:
+
+```sh
+featherless-cloud registry-keys add ghcr --server ghcr.io --username octocat
+echo "$GHCR_TOKEN" | featherless-cloud registry-keys add ghcr --server ghcr.io --username octocat --password-stdin
+featherless-cloud registry-keys list
+featherless-cloud exec --image ghcr.io/octocat/train:1 --registry ghcr -- python train.py
+```
+
+Registry keys are shared by your organization; only owners and admins can add, change or remove
+them. `registry-keys update <name> --change-password` replaces the stored password.
 
 ## Volumes and files
 
@@ -246,6 +267,8 @@ and volume names, folders inside `vol://` paths, templates, GPU models and profi
 | `exec -- <command>` | Run a command as a Run Job |
 | `runjob list`, `get`, `logs` | Inspect Run Jobs |
 | `runjob cancel`, `delete` | Stop a Run Job, or delete its record |
+| `ssh-keys list`, `add`, `delete` | Manage your SSH public keys |
+| `registry-keys list`, `add`, `update`, `delete` | Manage registry logins for private images |
 | `volume create`, `get`, `update`, `delete` | Manage network volumes |
 | `volume ls`, `find` | Browse files in a volume |
 | `volume cp`, `mv`, `mkdir`, `rm` | Manage files in a volume |

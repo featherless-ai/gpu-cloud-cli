@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { constants } from 'node:os';
 import { isIP } from 'node:net';
 import type { Command } from 'commander';
-import type { CliCommand } from '../../completions';
+import { CliCommand } from '../../completions';
 import { createContext } from '../../context';
 import { resolveAuth } from '../../config';
 import { CloudClient } from '../../clients/cloud';
@@ -124,27 +124,25 @@ async function connect(rawId: string, options: SshOptions, cmd: Command, session
   }
 
   if (instance.ssh?.hasKeys === false) {
-    ctx.fatal('No SSH keys registered. Add your public key in the console under Credentials → SSH keys, then retry.');
+    ctx.fatal('No SSH keys registered. Add one with featherless-cloud ssh-keys add, then retry.');
   }
 
   process.exitCode = await runSsh(sshArgs(instance, options.identity, session));
 }
 
-export function registerInstanceSshCommands(parent: CliCommand): void {
-  parent.command('ssh')
-    .argument('<id>', 'instance name or short id', { complete: instances })
-    .description('Open a shell using your local OpenSSH client')
-    .option('-i, --identity <file>', 'SSH private key file (otherwise use SSH config/agent)')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .addHelpText('after', '\nUses native SSH config, agent and host-key checks. Register your public key in the console first.\nExit with exit, or Enter then ~. (the normal SSH escape).')
-    .action((id: string, options: SshOptions, cmd: Command) => connect(id, options, cmd));
+export const instanceSshCommand = new CliCommand('ssh')
+  .argument('<id>', 'instance name or short id', { complete: instances })
+  .description('Open a shell using your local OpenSSH client')
+  .option('-i, --identity <file>', 'SSH private key file (otherwise use SSH config/agent)')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .addHelpText('after', '\nUses native SSH config, agent and host-key checks. Register your public key in the console first.\nExit with exit, or Enter then ~. (the normal SSH escape).')
+  .action((id: string, options: SshOptions, cmd: Command) => connect(id, options, cmd));
 
-  parent.command('tmux')
-    .argument('<id>', 'instance name or short id', { complete: instances })
-    .argument('[name]', 'tmux session name')
-    .description('Create or attach an exact named tmux session over SSH (default: default, the session the browser terminal opens)')
-    .option('-i, --identity <file>', 'SSH private key file (otherwise use SSH config/agent)')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .addHelpText('after', '\nNames: 1–64 letters, digits, underscores or hyphens; start with a letter or digit.\nUses tmux on the default socket for the SSH login user; tmux must already be installed.\nDetach with Ctrl-b d; reconnect with the same name. Enter then ~. disconnects SSH.\nSessions survive disconnects, not instance stop/restart/replacement or tmux server exit.\nNo software is installed and no SSH keys are registered automatically.')
-    .action((id: string, name: string | undefined, options: SshOptions, cmd: Command) => connect(id, options, cmd, name ?? 'default'));
-}
+export const instanceTmuxCommand = new CliCommand('tmux')
+  .argument('<id>', 'instance name or short id', { complete: instances })
+  .argument('[name]', 'tmux session name')
+  .description('Create or attach an exact named tmux session over SSH (default: default, the session the browser terminal opens)')
+  .option('-i, --identity <file>', 'SSH private key file (otherwise use SSH config/agent)')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .addHelpText('after', '\nNames: 1–64 letters, digits, underscores or hyphens; start with a letter or digit.\nUses tmux on the default socket for the SSH login user; tmux must already be installed.\nDetach with Ctrl-b d; reconnect with the same name. Enter then ~. disconnects SSH.\nSessions survive disconnects, not instance stop/restart/replacement or tmux server exit.\nNo software is installed and no SSH keys are registered automatically.')
+  .action((id: string, name: string | undefined, options: SshOptions, cmd: Command) => connect(id, options, cmd, name ?? 'default'));

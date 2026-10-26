@@ -1,7 +1,9 @@
 import { Argument, Command, Option } from 'commander';
-import { SCHEME } from './commands/volume/files';
 import type { CloudClient } from './clients/cloud';
 import { APP_NAME } from './version';
+
+/** Prefix of a volume path: `vol://<volume>/<path>`. */
+export const SCHEME = 'vol://';
 
 export interface CompleterContext {
   /** The --profile value on the line being completed. */
@@ -59,6 +61,12 @@ function isConfig(value: unknown): value is ValueConfig {
 
 /** Commander command whose options and arguments can declare a completer: `.option(flags, description, { complete })`. */
 export class CliCommand extends Command {
+  constructor(name?: string) {
+    super(name);
+    // addCommand() doesn't pass settings down the way command() does, so every command sets this itself.
+    this.configureHelp({ showGlobalOptions: true });
+  }
+
   override createCommand(name?: string): CliCommand {
     return new CliCommand(name);
   }

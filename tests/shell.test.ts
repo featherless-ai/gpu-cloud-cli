@@ -1,7 +1,7 @@
 import {
   afterEach, beforeEach, expect, it, vi,
 } from 'vitest';
-import { registerInstanceCommand } from '../src/commands/instance';
+import { instanceCommand } from '../src/commands/instance';
 import { CliCommand } from '../src/completions';
 import { resolveAuth } from '../src/config';
 import { CloudClient } from '../src/clients/cloud';
@@ -88,8 +88,7 @@ it('reattaches the tmux session it opened and explains a vanished one in CLI ter
     { frames: [{ type: 'error', message: 'Tmux session could not be opened. Refresh the session list and try again.' }], closeCode: 4007 },
   ];
 
-  const root = new CliCommand('featherless-cloud').option('--json');
-  registerInstanceCommand(root);
+  const root = new CliCommand('featherless-cloud').option('--json').addCommand(instanceCommand);
 
   await expect(root.parseAsync(['instance', 'shell', 'rcsrvch012'], { from: 'user' })).rejects.toThrow('exit 1');
   expect(createTerminalSession.mock.calls.map(call => call[3])).toEqual([{ tmux: 'default' }, { tmuxSessionId: 'tmux-1' }]);

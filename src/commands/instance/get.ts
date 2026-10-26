@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import type { CliCommand } from '../../completions';
+import { CliCommand } from '../../completions';
 import { createContext } from '../../context';
 import { resolveAuth } from '../../config';
 import { instances, resolveInstanceId, profiles } from '../shared';
@@ -47,71 +47,68 @@ function computeLabel(instance: InstanceDto): string {
   return `${resources.cpuCores} cores / ${resources.memoryGiB} GiB`;
 }
 
-export function registerInstanceGetCommand(parent: CliCommand): void {
-  parent
-    .command('get')
-    .argument('<id>', 'instance name or short id', { complete: instances })
-    .description('Show one instance')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .action(async (rawId: string, options: { profile?: string }, cmd: Command) => {
-      const ctx = createContext(cmd);
-      const auth = await resolveAuth(options.profile);
-      const client = new CloudClient(auth.apiBase, auth.apiKey);
-      const id = await resolveInstanceId(client, rawId);
+export const instanceGetCommand = new CliCommand('get')
+  .argument('<id>', 'instance name or short id', { complete: instances })
+  .description('Show one instance')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .action(async (rawId: string, options: { profile?: string }, cmd: Command) => {
+    const ctx = createContext(cmd);
+    const auth = await resolveAuth(options.profile);
+    const client = new CloudClient(auth.apiBase, auth.apiKey);
+    const id = await resolveInstanceId(client, rawId);
 
-      const instance = await ctx.spin('Fetching instance', () => client.getInstance(id));
+    const instance = await ctx.spin('Fetching instance', () => client.getInstance(id));
 
-      if (instance.lastError) {
-        ctx.warn(instance.lastError);
+    if (instance.lastError) {
+      ctx.warn(instance.lastError);
+    }
+
+    ctx.output(instance, (item: InstanceDto) => {
+      const lines: string[] = [
+        `NAME        ${item.name}`,
+        `SHORT ID    ${item.shortId}`,
+        `STATE       ${stateLabel(item)}`,
+        `HOURLY      ${formatDollars(item.costMicrosPerHour)}/hr`,
+        `COMPUTE     ${computeLabel(item)}`,
+        `DISK        ${item.ephemeralDiskGiB} GiB container`,
+      ];
+
+      for (const mount of item.networkVolumeMounts ?? []) {
+        lines.push(`VOLUMES     ${mount.volume.name} → ${mount.mountPath}`);
       }
 
-      ctx.output(instance, (item: InstanceDto) => {
-        const lines: string[] = [
-          `NAME        ${item.name}`,
-          `SHORT ID    ${item.shortId}`,
-          `STATE       ${stateLabel(item)}`,
-          `HOURLY      ${formatDollars(item.costMicrosPerHour)}/hr`,
-          `COMPUTE     ${computeLabel(item)}`,
-          `DISK        ${item.ephemeralDiskGiB} GiB container`,
-        ];
+      for (const port of item.publicPorts ?? []) {
+        lines.push(`PORT        ${port.port} → ${port.url ?? 'unavailable'}`);
+      }
 
-        for (const mount of item.networkVolumeMounts ?? []) {
-          lines.push(`VOLUMES     ${mount.volume.name} → ${mount.mountPath}`);
-        }
+      if (item.image) {
+        lines.push(`IMAGE       ${item.image.reference}`);
+      }
 
-        for (const port of item.publicPorts ?? []) {
-          lines.push(`PORT        ${port.port} → ${port.url ?? 'unavailable'}`);
-        }
+      if (item.templateVersion) {
+        lines.push(`TEMPLATE    ${item.templateVersion.name} ${item.templateVersion.version}`);
+      }
 
-        if (item.image) {
-          lines.push(`IMAGE       ${item.image.reference}`);
-        }
+      if (item.command) {
+        lines.push(`COMMAND     ${item.command.length ? item.command.join(' ') : 'Template default'}`);
+      }
 
-        if (item.templateVersion) {
-          lines.push(`TEMPLATE    ${item.templateVersion.name} ${item.templateVersion.version}`);
-        }
+      for (const variable of item.environment ?? []) {
+        lines.push(`ENVIRONMENT ${variable.name}=${variable.value}`);
+      }
 
-        if (item.command) {
-          lines.push(`COMMAND     ${item.command.length ? item.command.join(' ') : 'Template default'}`);
-        }
+      if ((item.secretNames?.length ?? 0) > 0) {
+        lines.push(`SECRETS     ${item.secretNames?.length} secret(s) redacted`);
+      }
 
-        for (const variable of item.environment ?? []) {
-          lines.push(`ENVIRONMENT ${variable.name}=${variable.value}`);
-        }
+      const up = uptime(item.runtimeStartedAt);
 
-        if ((item.secretNames?.length ?? 0) > 0) {
-          lines.push(`SECRETS     ${item.secretNames?.length} secret(s) redacted`);
-        }
+      if (up) {
+        lines.push(`UPTIME      ${up}`);
+      }
 
-        const up = uptime(item.runtimeStartedAt);
+      lines.push(`CREATED     ${item.createdAt.slice(0, 10)}`);
 
-        if (up) {
-          lines.push(`UPTIME      ${up}`);
-        }
-
-        lines.push(`CREATED     ${item.createdAt.slice(0, 10)}`);
-
-        return { text: lines.join('\n') };
-      });
+      return { text: lines.join('\n') };
     });
-}
+  });

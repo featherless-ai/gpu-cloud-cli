@@ -1,20 +1,23 @@
-import type { CliCommand } from '../../completions';
-import { registerVolumeGetCommand } from './get';
-import { registerVolumeCreateCommand } from './create';
-import { registerVolumeUpdateCommand } from './update';
-import { registerVolumeDeleteCommand } from './delete';
-import { registerVolumeFileCommands } from './files';
-import { registerVolumeSyncCommand } from './sync';
+import { CliCommand } from '../../completions';
+import { volumeGetCommand } from './get';
+import { volumeCreateCommand } from './create';
+import { volumeUpdateCommand } from './update';
+import { volumeDeleteCommand } from './delete';
+import {
+  volumeLsCommand, volumeFindCommand, volumeMkdirCommand, volumeRmCommand, volumeCpCommand, volumeMvCommand,
+} from './files';
+import { volumeSyncCommand } from './sync';
 
-export function registerVolumeCommand(program: CliCommand): void {
-  const volume = program
-    .command('volume')
-    .description('Manage network storage volumes');
-
-  registerVolumeGetCommand(volume);
-  registerVolumeCreateCommand(volume);
-  registerVolumeUpdateCommand(volume);
-  registerVolumeDeleteCommand(volume);
-  registerVolumeFileCommands(volume);
-  registerVolumeSyncCommand(volume);
-}
+export const volumeCommand = new CliCommand('volume')
+  .description('Manage network storage volumes')
+  .addCommand(volumeGetCommand)
+  .addCommand(volumeCreateCommand)
+  .addCommand(volumeUpdateCommand)
+  .addCommand(volumeDeleteCommand)
+  .addCommand(volumeLsCommand)
+  .addCommand(volumeFindCommand)
+  .addCommand(volumeMkdirCommand)
+  .addCommand(volumeRmCommand)
+  .addCommand(volumeCpCommand)
+  .addCommand(volumeMvCommand)
+  .addCommand(volumeSyncCommand);
