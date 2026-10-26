@@ -19,6 +19,5 @@ shape, update the matching schema here.
 
 ## Releases
 
-1. Bump `version` in `package.json` and merge.
-2. Push a `v<version>` tag on `main`. Only Maintainers can.
-3. The CI `publish` job checks the tag matches the version and publishes to npm.
+Bump `version` in `package.json` in the MR that should ship. When it merges, the `publish` job on
+`main` publishes that version to npm and tags `v<version>`. Merges without a bump publish nothing.
