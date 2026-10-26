@@ -73,7 +73,7 @@ export async function fetchLatestVersion(): Promise<string> {
 /** Installs a version globally with npm. npm's own output goes to stderr in --json mode so stdout stays one JSON document. */
 export function npmInstall(spec: string, json = false): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn('npm', ['install', '--global', spec], {
+    const child = spawn('npm', ['install', '--global', '--prefer-online', spec], {
       stdio: ['ignore', json ? process.stderr : 'inherit', 'inherit'],
       shell: process.platform === 'win32',
     });
