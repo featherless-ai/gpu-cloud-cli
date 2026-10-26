@@ -135,6 +135,18 @@ export interface UpdateInstanceBody {
   environment?: Array<{ name: string; value: string }>;
 }
 
+export interface AddSshKeyBody {
+  name: string;
+  publicKey: string;
+}
+
+export interface RegistryCredentialBody {
+  name: string;
+  registry: string;
+  username: string;
+  secret: string;
+}
+
 export type InstanceAction = 'start' | 'stop' | 'restart' | 'delete';
 
 export interface CreateVolumeBody {
@@ -331,8 +343,28 @@ export class CloudClient {
     return this.typed('GET', '/me/ssh-keys', undefined, z.array(sshKeySchema), { unwrapData: true });
   }
 
+  async addSshKey(body: AddSshKeyBody): Promise<SshKey> {
+    return this.typed('POST', '/me/ssh-keys', body, sshKeySchema, { unwrapData: true });
+  }
+
+  async deleteSshKey(id: string): Promise<number> {
+    return this.requestWithStatus('DELETE', `/me/ssh-keys/${encodeURIComponent(id)}`);
+  }
+
   async registryCredentials(): Promise<RegistryCredential[]> {
     return this.typed('GET', '/registry-credentials', undefined, z.array(registryCredentialSchema), { unwrapData: true });
+  }
+
+  async addRegistryCredential(body: RegistryCredentialBody): Promise<RegistryCredential> {
+    return this.typed('POST', '/registry-credentials', body, registryCredentialSchema, { unwrapData: true });
+  }
+
+  async updateRegistryCredential(id: string, body: Partial<RegistryCredentialBody>): Promise<RegistryCredential> {
+    return this.typed('PATCH', `/registry-credentials/${encodeURIComponent(id)}`, body, registryCredentialSchema, { unwrapData: true });
+  }
+
+  async deleteRegistryCredential(id: string): Promise<number> {
+    return this.requestWithStatus('DELETE', `/registry-credentials/${encodeURIComponent(id)}`);
   }
 
   async billingSummary(): Promise<BillingSummary> {

@@ -179,6 +179,8 @@ export const registryCredentialSchema = z.object({
   id: z.string(),
   name: z.string(),
   registry: z.string(),
+  username: z.string(),
+  updatedAt: z.string(),
 });
 
 export type RegistryCredential = z.infer<typeof registryCredentialSchema>;

@@ -12,6 +12,7 @@ import {
   resolveCompute,
   resolveImage,
   resolveInstanceId,
+  resolveSshKeyRef,
   resolveVolume,
   toEnvironment,
   validateMounts,
@@ -21,7 +22,8 @@ import { CliContext } from '../src/context';
 import { CliError } from '../src/error';
 import type { PriceRate, CatalogTemplate } from '../src/types/pricing';
 import type { NetworkVolumeDto } from '../src/types/volume';
-import type { RegistryCredential } from '../src/types/instance';
+import type { RegistryCredential, SshKey } from '../src/types/instance';
+import { parsePublicKey } from '../src/commands/ssh-keys/add';
 import type { InstanceDto } from '../src/types/instance';
 import type { CloudClient } from '../src/clients/cloud';
 
@@ -98,6 +100,8 @@ const CREDENTIALS: RegistryCredential[] = [{
   id: '22222222-2222-4222-8222-222222222222',
   name: 'Private Hub',
   registry: 'registry.example.com',
+  username: 'robot',
+  updatedAt: '2026-10-26T00:00:00.000Z',
 }];
 
 function volume(overrides: Partial<NetworkVolumeDto> = {}): NetworkVolumeDto {
@@ -432,5 +436,46 @@ describe('newContent', () => {
 
   it('emits nothing when the tail is unchanged', () => {
     expect(newContent('same', 'same')).toBe('');
+  });
+});
+
+describe('resolveSshKeyRef', () => {
+  const keys: SshKey[] = [
+    { id: '33333333-3333-4333-8333-333333333333', name: 'laptop', fingerprint: 'SHA256:a', createdAt: '2026-10-26T00:00:00.000Z' },
+    { id: '44444444-4444-4444-8444-444444444444', name: 'ci', fingerprint: 'SHA256:b', createdAt: '2026-10-26T00:00:00.000Z' },
+    { id: '55555555-5555-4555-8555-555555555555', name: 'ci', fingerprint: 'SHA256:c', createdAt: '2026-10-26T00:00:00.000Z' },
+  ];
+
+  it('matches a name case-insensitively, or an id', () => {
+    expect(resolveSshKeyRef(keys, 'Laptop').id).toBe(keys[0]?.id);
+    expect(resolveSshKeyRef(keys, '44444444-4444-4444-8444-444444444444').fingerprint).toBe('SHA256:b');
+  });
+
+  it('asks for the id when a name is shared', () => {
+    expect(() => resolveSshKeyRef(keys, 'ci')).toThrow('Several SSH keys are named "ci"');
+  });
+
+  it('rejects an unknown key', () => {
+    expect(() => resolveSshKeyRef(keys, 'nope')).toThrow('No SSH key matching "nope"');
+  });
+});
+
+describe('parsePublicKey', () => {
+  it('keeps the key line and its comment', () => {
+    expect(parsePublicKey('ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI me@laptop\n'))
+      .toEqual({ publicKey: 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI me@laptop', comment: 'me@laptop' });
+  });
+
+  it('accepts a key without a comment', () => {
+    expect(parsePublicKey('ecdsa-sha2-nistp256 AAAAE2VjZHNh').comment).toBeUndefined();
+  });
+
+  it('refuses a private key', () => {
+    expect(() => parsePublicKey('-----BEGIN OPENSSH PRIVATE KEY-----\nabc\n-----END OPENSSH PRIVATE KEY-----'))
+      .toThrow('That is a private key.');
+  });
+
+  it('refuses anything else', () => {
+    expect(() => parsePublicKey('hello world')).toThrow('That is not an OpenSSH public key.');
   });
 });

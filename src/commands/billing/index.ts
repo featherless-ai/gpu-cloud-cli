@@ -1,12 +1,8 @@
-import type { CliCommand } from '../../completions';
-import { registerBillingSettingsCommand } from './settings';
-import { registerBillingHistoryCommand } from './history';
+import { CliCommand } from '../../completions';
+import { billingSettingsCommand } from './settings';
+import { billingHistoryCommand } from './history';
 
-export function registerBillingCommand(program: CliCommand): void {
-  const billing = program
-    .command('billing')
-    .description('Show balance and usage history');
-
-  registerBillingSettingsCommand(billing);
-  registerBillingHistoryCommand(billing);
-}
+export const billingCommand = new CliCommand('billing')
+  .description('Show balance and usage history')
+  .addCommand(billingSettingsCommand)
+  .addCommand(billingHistoryCommand);

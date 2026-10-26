@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import type { CliCommand } from '../../completions';
+import { CliCommand } from '../../completions';
 import { jobs, profiles } from '../shared';
 import { CloudClient } from '../../clients/cloud';
 import { resolveAuth } from '../../config';
@@ -14,40 +14,38 @@ const WAITING_LABELS: Record<string, string> = {
   queue_capacity: 'waiting for cluster capacity',
 };
 
-export function registerJobGetCommand(parent: CliCommand): void {
-  parent.command('get')
-    .argument('<id>', 'Run Job short id', { complete: jobs })
-    .description('Show one Run Job')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .action(async (id: string, options: { profile?: string }, cmd: Command) => {
-      const ctx = createContext(cmd);
-      const auth = await resolveAuth(options.profile);
-      const job = await ctx.spin('Fetching Run Job', () => new CloudClient(auth.apiBase, auth.apiKey).getJob(id));
+export const jobGetCommand = new CliCommand('get')
+  .argument('<id>', 'Run Job short id', { complete: jobs })
+  .description('Show one Run Job')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .action(async (id: string, options: { profile?: string }, cmd: Command) => {
+    const ctx = createContext(cmd);
+    const auth = await resolveAuth(options.profile);
+    const job = await ctx.spin('Fetching Run Job', () => new CloudClient(auth.apiBase, auth.apiKey).getJob(id));
 
-      if (job.statusMessage) {
-        ctx.warn(job.statusMessage);
-      }
+    if (job.statusMessage) {
+      ctx.warn(job.statusMessage);
+    }
 
-      ctx.output(job, (item: RunJobDto) => ({
-        text: [
-          `NAME        ${item.name}`,
-          `SHORT ID    ${item.shortId}`,
-          `STATE       ${item.admissionState === 'waiting' ? WAITING_LABELS[item.statusReason ?? ''] ?? 'waiting' : item.state}`,
-          `COMPUTE     ${item.computeType === 'gpu' ? `${item.gpuCount} x ${item.resources.gpuModel ?? item.computeSku}` : `${item.resources.cpuCores} vCPU / ${item.resources.memoryGiB} GiB`}`,
-          `HOURLY      ${formatDollars(item.costMicrosPerHour)}/hr`,
-          ...(item.computeDiscount ? [`DISCOUNT    ${item.computeDiscount.name}, list price ${formatDollars(listHourly(item))}/hr`] : []),
-          `IMAGE       ${item.image.reference}`,
-          `COMMAND     ${item.command.join(' ')}`,
-          `TIMEOUT     ${item.timeoutSeconds}s after compute assignment`,
-          `EXIT CODE   ${item.exitCode ?? '-'}`,
-          `RETRIES     ${item.preemptionRetries} if interrupted for other work`,
-          ...(item.attempts.length > 1 ? item.attempts.map(attempt => `ATTEMPT ${attempt.number}   ${attempt.state}${attempt.startedAt ? `, started ${attempt.startedAt}` : ''}`) : []),
-          ...item.networkVolumeMounts.map(mount => `VOLUME      ${mount.name} → ${mount.mountPath}`),
-          `CREATED     ${item.createdAt}`,
-        ].join('\n'),
-      }));
-    });
-}
+    ctx.output(job, (item: RunJobDto) => ({
+      text: [
+        `NAME        ${item.name}`,
+        `SHORT ID    ${item.shortId}`,
+        `STATE       ${item.admissionState === 'waiting' ? WAITING_LABELS[item.statusReason ?? ''] ?? 'waiting' : item.state}`,
+        `COMPUTE     ${item.computeType === 'gpu' ? `${item.gpuCount} x ${item.resources.gpuModel ?? item.computeSku}` : `${item.resources.cpuCores} vCPU / ${item.resources.memoryGiB} GiB`}`,
+        `HOURLY      ${formatDollars(item.costMicrosPerHour)}/hr`,
+        ...(item.computeDiscount ? [`DISCOUNT    ${item.computeDiscount.name}, list price ${formatDollars(listHourly(item))}/hr`] : []),
+        `IMAGE       ${item.image.reference}`,
+        `COMMAND     ${item.command.join(' ')}`,
+        `TIMEOUT     ${item.timeoutSeconds}s after compute assignment`,
+        `EXIT CODE   ${item.exitCode ?? '-'}`,
+        `RETRIES     ${item.preemptionRetries} if interrupted for other work`,
+        ...(item.attempts.length > 1 ? item.attempts.map(attempt => `ATTEMPT ${attempt.number}   ${attempt.state}${attempt.startedAt ? `, started ${attempt.startedAt}` : ''}`) : []),
+        ...item.networkVolumeMounts.map(mount => `VOLUME      ${mount.name} → ${mount.mountPath}`),
+        `CREATED     ${item.createdAt}`,
+      ].join('\n'),
+    }));
+  });
 
 /** What the job would cost an hour without its discount. */
 function listHourly(job: RunJobDto): string {

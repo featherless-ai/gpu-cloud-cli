@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import type { CliCommand } from '../../completions';
+import { CliCommand } from '../../completions';
 import { createContext } from '../../context';
 import { resolveAuth } from '../../config';
 import { CloudClient } from '../../clients/cloud';
@@ -17,47 +17,44 @@ function parseCapacity(value: string): number {
   return capacity;
 }
 
-export function registerVolumeUpdateCommand(parent: CliCommand): void {
-  parent
-    .command('update')
-    .argument('<id>', 'volume name or id', { complete: volumes })
-    .description('Rename or grow a network volume')
-    .option('--name <new>', 'new volume name')
-    .option('--gb <n>', 'new capacity in GB (grow-only, 10-10240)')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .action(async (id: string, options: { name?: string; gb?: string; profile?: string }, cmd: Command) => {
-      const ctx = createContext(cmd);
-      const auth = await resolveAuth(options.profile);
-      const client = new CloudClient(auth.apiBase, auth.apiKey);
+export const volumeUpdateCommand = new CliCommand('update')
+  .argument('<id>', 'volume name or id', { complete: volumes })
+  .description('Rename or grow a network volume')
+  .option('--name <new>', 'new volume name')
+  .option('--gb <n>', 'new capacity in GB (grow-only, 10-10240)')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .action(async (id: string, options: { name?: string; gb?: string; profile?: string }, cmd: Command) => {
+    const ctx = createContext(cmd);
+    const auth = await resolveAuth(options.profile);
+    const client = new CloudClient(auth.apiBase, auth.apiKey);
 
-      if (options.name === undefined && options.gb === undefined) {
-        ctx.fatal('Nothing to update.');
+    if (options.name === undefined && options.gb === undefined) {
+      ctx.fatal('Nothing to update.');
+    }
+
+    const volume = await ctx.spin('Updating volume', async () => {
+      const volumes = await client.listVolumes();
+      const current = await client.getVolume(findVolume(volumes, id).id);
+
+      const body: { name?: string; capacityGiB?: number } = {};
+
+      if (options.name !== undefined) {
+        body.name = options.name;
       }
 
-      const volume = await ctx.spin('Updating volume', async () => {
-        const volumes = await client.listVolumes();
-        const current = await client.getVolume(findVolume(volumes, id).id);
+      if (options.gb !== undefined) {
+        const capacity = parseCapacity(options.gb);
 
-        const body: { name?: string; capacityGiB?: number } = {};
-
-        if (options.name !== undefined) {
-          body.name = options.name;
+        if (capacity < current.capacityGiB) {
+          throw new CliError(`Volumes can only grow. Current capacity is ${current.capacityGiB} GB.`);
         }
 
-        if (options.gb !== undefined) {
-          const capacity = parseCapacity(options.gb);
+        body.capacityGiB = capacity;
+      }
 
-          if (capacity < current.capacityGiB) {
-            throw new CliError(`Volumes can only grow. Current capacity is ${current.capacityGiB} GB.`);
-          }
-
-          body.capacityGiB = capacity;
-        }
-
-        return client.patchVolume(current.id, body);
-      });
-
-      ctx.success(`Volume ${volume.name} updated.`);
-      ctx.output(volume, (item: NetworkVolumeDto) => ({ text: `STATE ${item.state} · ${item.capacityGiB} GiB` }));
+      return client.patchVolume(current.id, body);
     });
-}
+
+    ctx.success(`Volume ${volume.name} updated.`);
+    ctx.output(volume, (item: NetworkVolumeDto) => ({ text: `STATE ${item.state} · ${item.capacityGiB} GiB` }));
+  });

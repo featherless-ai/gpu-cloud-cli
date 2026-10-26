@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import type { CliCommand } from '../../completions';
+import { CliCommand } from '../../completions';
 import { createContext } from '../../context';
 import { resolveAuth } from '../../config';
 import { CloudClient } from '../../clients/cloud';
@@ -49,65 +49,62 @@ const sleep = (ms: number): Promise<void> => {
   return promise;
 };
 
-export function registerInstanceLogsCommand(parent: CliCommand): void {
-  parent
-    .command('logs')
-    .argument('<id>', 'instance name or short id', { complete: instances })
-    .description('Print bounded debug output; use your own logging service for complete logs')
-    .option('--head', 'show the captured beginning instead of recent output')
-    .option('--tail <n>', 'lines of history (1-5000)', '500')
-    .option('--follow', 'keep streaming new lines')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .action(async (rawId: string, options: { tail: string; head?: boolean; follow?: boolean; profile?: string }, cmd: Command) => {
-      const ctx = createContext(cmd);
+export const instanceLogsCommand = new CliCommand('logs')
+  .argument('<id>', 'instance name or short id', { complete: instances })
+  .description('Print bounded debug output; use your own logging service for complete logs')
+  .option('--head', 'show the captured beginning instead of recent output')
+  .option('--tail <n>', 'lines of history (1-5000)', '500')
+  .option('--follow', 'keep streaming new lines')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .action(async (rawId: string, options: { tail: string; head?: boolean; follow?: boolean; profile?: string }, cmd: Command) => {
+    const ctx = createContext(cmd);
 
-      if (options.head && options.follow) {
-        throw new CliError('--head cannot be combined with --follow');
+    if (options.head && options.follow) {
+      throw new CliError('--head cannot be combined with --follow');
+    }
+
+    const tail = Number(options.tail);
+
+    if (!Number.isInteger(tail) || tail < 1 || tail > 5000) {
+      throw new CliError('--tail must be between 1 and 5000');
+    }
+
+    if (options.follow && ctx.mode === 'json') {
+      ctx.fatal('--follow cannot be combined with --json');
+    }
+
+    const auth = await resolveAuth(options.profile);
+    const client = new CloudClient(auth.apiBase, auth.apiKey);
+    const id = await resolveInstanceId(client, rawId);
+
+    const first = await ctx.spin('Fetching logs', () => client.instanceLogs(id, tail, options.head ? 'head' : 'tail'));
+    ctx.output(first, result => ({ text: result.logs }));
+
+    if (!options.follow) {
+      return;
+    }
+
+    let previous = first.logs;
+
+    for (;;) {
+      await sleep(POLL_MS);
+      const instance = await client.getInstance(id).catch(() => null);
+      const latest = await client.instanceLogs(id, tail, options.head ? 'head' : 'tail').catch(() => null);
+
+      if (latest) {
+        const delta = newContent(previous, latest.logs);
+
+        if (delta) {
+          process.stdout.write(delta.endsWith('\n') ? delta : `${delta}\n`);
+        }
+
+        previous = latest.logs;
       }
 
-      const tail = Number(options.tail);
+      if (!instance || instance.state !== 'running') {
+        ctx.log('logs stopped');
 
-      if (!Number.isInteger(tail) || tail < 1 || tail > 5000) {
-        throw new CliError('--tail must be between 1 and 5000');
-      }
-
-      if (options.follow && ctx.mode === 'json') {
-        ctx.fatal('--follow cannot be combined with --json');
-      }
-
-      const auth = await resolveAuth(options.profile);
-      const client = new CloudClient(auth.apiBase, auth.apiKey);
-      const id = await resolveInstanceId(client, rawId);
-
-      const first = await ctx.spin('Fetching logs', () => client.instanceLogs(id, tail, options.head ? 'head' : 'tail'));
-      ctx.output(first, result => ({ text: result.logs }));
-
-      if (!options.follow) {
         return;
       }
-
-      let previous = first.logs;
-
-      for (;;) {
-        await sleep(POLL_MS);
-        const instance = await client.getInstance(id).catch(() => null);
-        const latest = await client.instanceLogs(id, tail, options.head ? 'head' : 'tail').catch(() => null);
-
-        if (latest) {
-          const delta = newContent(previous, latest.logs);
-
-          if (delta) {
-            process.stdout.write(delta.endsWith('\n') ? delta : `${delta}\n`);
-          }
-
-          previous = latest.logs;
-        }
-
-        if (!instance || instance.state !== 'running') {
-          ctx.log('logs stopped');
-
-          return;
-        }
-      }
-    });
-}
+    }
+  });

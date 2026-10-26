@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import type { CliCommand } from '../completions';
+import { CliCommand } from '../completions';
 import { profiles } from './shared';
 import * as p from '@clack/prompts';
 import { CliContext, createContext } from '../context';
@@ -55,71 +55,68 @@ async function storeProfile(
   ctx.success(`Signed in${email ? ` as ${email}` : ''} (profile "${profile}").`);
 }
 
-export function registerLoginCommand(program: CliCommand): void {
-  program
-    .command('login')
-    .description('Store an API key for this device')
-    .option('--profile <name>', 'profile to store the credentials under', { defaultValue: 'default', complete: profiles })
-    .option('--key <secret>', 'API key to store (non-interactive)')
-    .action(async (options: { profile: string; key?: string }, cmd: Command) => {
-      const ctx = createContext(cmd);
-      const profile = options.profile;
-      const key = options.key?.trim();
+export const loginCommand = new CliCommand('login')
+  .description('Store an API key for this device')
+  .option('--profile <name>', 'profile to store the credentials under', { defaultValue: 'default', complete: profiles })
+  .option('--key <secret>', 'API key to store (non-interactive)')
+  .action(async (options: { profile: string; key?: string }, cmd: Command) => {
+    const ctx = createContext(cmd);
+    const profile = options.profile;
+    const key = options.key?.trim();
 
-      if (key) {
-        if (!KEY_PATTERN.test(key)) {
-          throw new CliError('That does not look like an API key. Keys start with flkey_.');
-        }
-
-        const email = await ctx.spin('Verifying key', () => verifyKey(key));
-        await storeProfile(ctx, profile, key, email);
-        return;
+    if (key) {
+      if (!KEY_PATTERN.test(key)) {
+        throw new CliError('That does not look like an API key. Keys start with flkey_.');
       }
 
-      if (ctx.mode !== 'interactive') {
-        throw new CliError(
-          `Pass the key with --key <secret>. Create one at ${consoleBaseUrl()}/credentials/api-keys.`,
-        );
-      }
+      const email = await ctx.spin('Verifying key', () => verifyKey(key));
+      await storeProfile(ctx, profile, key, email);
+      return;
+    }
 
-      const url = `${consoleBaseUrl()}/credentials/api-keys?create=1`;
-      ctx.log(`Create an API key in your browser, then paste it below.\n  ${url}`);
-      openBrowser(url);
+    if (ctx.mode !== 'interactive') {
+      throw new CliError(
+        `Pass the key with --key <secret>. Create one at ${consoleBaseUrl()}/credentials/api-keys.`,
+      );
+    }
 
-      for (;;) {
-        const answer = await p.text({
-          message: 'API key',
-          placeholder: 'flkey_…',
-          validate: value => {
-            if (!value) {
-              return 'Paste the key shown in the browser, or press Ctrl+C to cancel.';
-            }
+    const url = `${consoleBaseUrl()}/credentials/api-keys?create=1`;
+    ctx.log(`Create an API key in your browser, then paste it below.\n  ${url}`);
+    openBrowser(url);
 
-            if (!KEY_PATTERN.test(value)) {
-              return 'That does not look like an API key. Keys start with flkey_.';
-            }
-
-            return undefined;
-          },
-        });
-
-        if (p.isCancel(answer)) {
-          p.cancel('Login cancelled.');
-          process.exit(0);
-        }
-
-        try {
-          const pasted = answer.trim();
-          const email = await ctx.spin('Verifying key', () => verifyKey(pasted));
-          await storeProfile(ctx, profile, pasted, email);
-          return;
-        } catch (err) {
-          if (err instanceof CliError && err.message.startsWith('Could not connect')) {
-            throw err;
+    for (;;) {
+      const answer = await p.text({
+        message: 'API key',
+        placeholder: 'flkey_…',
+        validate: value => {
+          if (!value) {
+            return 'Paste the key shown in the browser, or press Ctrl+C to cancel.';
           }
 
-          p.log.warn('The API rejected that key. Create a new one in the browser and paste it again.');
-        }
+          if (!KEY_PATTERN.test(value)) {
+            return 'That does not look like an API key. Keys start with flkey_.';
+          }
+
+          return undefined;
+        },
+      });
+
+      if (p.isCancel(answer)) {
+        p.cancel('Login cancelled.');
+        process.exit(0);
       }
-    });
-}
+
+      try {
+        const pasted = answer.trim();
+        const email = await ctx.spin('Verifying key', () => verifyKey(pasted));
+        await storeProfile(ctx, profile, pasted, email);
+        return;
+      } catch (err) {
+        if (err instanceof CliError && err.message.startsWith('Could not connect')) {
+          throw err;
+        }
+
+        p.log.warn('The API rejected that key. Create a new one in the browser and paste it again.');
+      }
+    }
+  });

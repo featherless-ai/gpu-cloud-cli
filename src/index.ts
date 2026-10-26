@@ -1,13 +1,15 @@
-import { registerLoginCommand } from './commands/login';
-import { registerLogoutCommand } from './commands/logout';
-import { registerInstanceCommand } from './commands/instance';
-import { registerVolumeCommand } from './commands/volume';
-import { registerPricingCommand } from './commands/pricing';
-import { registerBillingCommand } from './commands/billing';
-import { registerJobCommand } from './commands/job';
-import { registerExecCommand } from './commands/exec';
-import { registerUpgradeCommand } from './commands/upgrade';
-import { registerCompletionCommand } from './commands/completion';
+import { loginCommand } from './commands/login';
+import { logoutCommand } from './commands/logout';
+import { instanceCommand } from './commands/instance';
+import { volumeCommand } from './commands/volume';
+import { pricingCommand } from './commands/pricing';
+import { billingCommand } from './commands/billing';
+import { jobCommand } from './commands/job';
+import { execCommand } from './commands/exec';
+import { sshKeysCommand } from './commands/ssh-keys';
+import { registryKeysCommand } from './commands/registry-keys';
+import { upgradeCommand } from './commands/upgrade';
+import { completeCommand, completionCommand } from './commands/completion';
 import { offerUpdate, runUpdateCheck } from './update-check';
 import { describeError } from './error';
 import { APP_NAME, VERSION } from './version';
@@ -36,26 +38,23 @@ program
   .description('Featherless GPU Cloud CLI')
   .option('--json', 'output as JSON (for scripts and agents)')
   .option('--non-interactive', 'disable spinners and prompts')
-  .version(VERSION)
-  .configureHelp({ showGlobalOptions: true });
-
-registerLoginCommand(program);
-registerLogoutCommand(program);
-registerInstanceCommand(program);
-registerVolumeCommand(program);
-registerPricingCommand(program);
-registerBillingCommand(program);
-registerJobCommand(program);
-registerExecCommand(program);
-registerUpgradeCommand(program);
-
-registerCompletionCommand(program);
+  .version(VERSION);
 
 program
-  .command('_check-update', { hidden: true })
-  .action(async () => {
-    await runUpdateCheck();
-  });
+  .addCommand(loginCommand)
+  .addCommand(logoutCommand)
+  .addCommand(instanceCommand)
+  .addCommand(volumeCommand)
+  .addCommand(pricingCommand)
+  .addCommand(billingCommand)
+  .addCommand(jobCommand)
+  .addCommand(execCommand)
+  .addCommand(sshKeysCommand)
+  .addCommand(registryKeysCommand)
+  .addCommand(upgradeCommand)
+  .addCommand(completionCommand)
+  .addCommand(completeCommand, { hidden: true })
+  .addCommand(new CliCommand('_check-update').action(runUpdateCheck), { hidden: true });
 
 await offerUpdate();
 program.parse();

@@ -4,7 +4,7 @@ import {
 } from 'node:fs/promises';
 import { dirname, join, resolve } from 'node:path';
 import type { Command } from 'commander';
-import type { CliCommand } from '../../completions';
+import { CliCommand } from '../../completions';
 import { FileApiError, type FileEntry } from '../../clients/files';
 import { getConfigDir } from '../../config';
 import { createContext, type CliContext } from '../../context';
@@ -963,50 +963,47 @@ function emit(ctx: CliContext, report: SyncReport, lines: () => string[]): void 
   }
 }
 
-export function registerVolumeSyncCommand(volume: CliCommand): void {
-  const collect = (pattern: string, values: string[]): string[] => [...values, pattern];
+const collect = (pattern: string, values: string[]): string[] => [...values, pattern];
 
-  volume
-    .command('sync')
-    .argument('<local-folder>', 'folder on this computer')
-    .argument('<remote-folder>', 'vol://<volume>/<path> folder in the volume', { complete: volumePaths })
-    .usage('[options] <local-folder> <vol://<volume>/<path>')
-    .description('Sync a folder with a folder in a volume, sending what changed each way; never deletes')
-    .option('--mode <mode>', 'upload, download or both', 'both')
-    .option('--dry-run', 'show what would be sent, received and created')
-    .option('--mkdirs', 'create missing folders on either side')
-    .option('--force', 'send even when the chosen side is older (needs --mode upload or --mode download)')
-    .option('--concurrency <n>', `files at a time, 1 to ${MAX_CONCURRENCY}`, String(DEFAULT_CONCURRENCY))
-    .option('--include <glob>', 'only relative paths matching a glob (*, ** and ?)', collect, [] as string[])
-    .option('--exclude <glob>', 'skip relative paths matching a glob (*, ** and ?)', collect, [] as string[])
-    .option('-v, --verbose', 'print each file as it syncs')
-    .option('--progress', 'show a running total on stderr')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .addHelpText('after', '\nExamples:\n  featherless-cloud volume sync ./weights vol://datasets/models/\n  featherless-cloud volume sync --mode download --mkdirs . vol://datasets/models\n  featherless-cloud volume sync --dry-run ./ckpt vol://datasets/ckpt')
-    .action(async (local: string, remote: string, options: {
-      mode?: string; dryRun?: boolean; mkdirs?: boolean; force?: boolean; concurrency?: string;
-      include?: string[]; exclude?: string[]; verbose?: boolean; progress?: boolean; profile?: string;
-    }, cmd: Command) => {
-      const ctx = createContext(cmd);
-      const address = volumeAddress(remote);
+export const volumeSyncCommand = new CliCommand('sync')
+  .argument('<local-folder>', 'folder on this computer')
+  .argument('<remote-folder>', 'vol://<volume>/<path> folder in the volume', { complete: volumePaths })
+  .usage('[options] <local-folder> <vol://<volume>/<path>')
+  .description('Sync a folder with a folder in a volume, sending what changed each way; never deletes')
+  .option('--mode <mode>', 'upload, download or both', 'both')
+  .option('--dry-run', 'show what would be sent, received and created')
+  .option('--mkdirs', 'create missing folders on either side')
+  .option('--force', 'send even when the chosen side is older (needs --mode upload or --mode download)')
+  .option('--concurrency <n>', `files at a time, 1 to ${MAX_CONCURRENCY}`, String(DEFAULT_CONCURRENCY))
+  .option('--include <glob>', 'only relative paths matching a glob (*, ** and ?)', collect, [] as string[])
+  .option('--exclude <glob>', 'skip relative paths matching a glob (*, ** and ?)', collect, [] as string[])
+  .option('-v, --verbose', 'print each file as it syncs')
+  .option('--progress', 'show a running total on stderr')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .addHelpText('after', '\nExamples:\n  featherless-cloud volume sync ./weights vol://datasets/models/\n  featherless-cloud volume sync --mode download --mkdirs . vol://datasets/models\n  featherless-cloud volume sync --dry-run ./ckpt vol://datasets/ckpt')
+  .action(async (local: string, remote: string, options: {
+    mode?: string; dryRun?: boolean; mkdirs?: boolean; force?: boolean; concurrency?: string;
+    include?: string[]; exclude?: string[]; verbose?: boolean; progress?: boolean; profile?: string;
+  }, cmd: Command) => {
+    const ctx = createContext(cmd);
+    const address = volumeAddress(remote);
 
-      const data = await filesFor([address.volume], options.profile);
+    const data = await filesFor([address.volume], options.profile);
 
-      const report = await syncVolumeFolder(ctx, data, local, address.path, {
-        ...options,
-        mode: options.mode as SyncMode | undefined,
-        concurrency: concurrency(options.concurrency),
-      });
-
-      emit(ctx, report, () => [
-        options.dryRun
-          ? `Would upload and download ${report.planned} file(s), create ${report.directories} folder(s); skipped ${report.skipped}, conflict(s) ${report.conflicts}.`
-          : `Uploaded ${report.uploaded} file(s), ${formatSize(report.uploadedBytes)}; downloaded ${report.downloaded} file(s), ${formatSize(report.downloadedBytes)}; created ${report.directories} folder(s); skipped ${report.skipped}, conflict(s) ${report.conflicts}, failed ${report.failed.length}.`,
-        ...(report.truncated ? ['… and more actions not listed.'] : []),
-      ]);
-
-      if (report.failed.length || report.conflicts) {
-        process.exitCode = 1;
-      }
+    const report = await syncVolumeFolder(ctx, data, local, address.path, {
+      ...options,
+      mode: options.mode as SyncMode | undefined,
+      concurrency: concurrency(options.concurrency),
     });
-}
+
+    emit(ctx, report, () => [
+      options.dryRun
+        ? `Would upload and download ${report.planned} file(s), create ${report.directories} folder(s); skipped ${report.skipped}, conflict(s) ${report.conflicts}.`
+        : `Uploaded ${report.uploaded} file(s), ${formatSize(report.uploadedBytes)}; downloaded ${report.downloaded} file(s), ${formatSize(report.downloadedBytes)}; created ${report.directories} folder(s); skipped ${report.skipped}, conflict(s) ${report.conflicts}, failed ${report.failed.length}.`,
+      ...(report.truncated ? ['… and more actions not listed.'] : []),
+    ]);
+
+    if (report.failed.length || report.conflicts) {
+      process.exitCode = 1;
+    }
+  });

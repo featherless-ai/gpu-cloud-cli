@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import type { CliCommand } from '../../completions';
+import { CliCommand } from '../../completions';
 import { createContext } from '../../context';
 import { resolveAuth } from '../../config';
 import { CloudClient, type InstanceAction } from '../../clients/cloud';
@@ -26,37 +26,41 @@ const DESCRIPTION: Record<InstanceAction, string> = {
   delete: 'Delete',
 };
 
-export function registerInstanceActionCommands(parent: CliCommand): void {
-  for (const action of ['start', 'stop', 'restart', 'delete'] as const) {
-    const command = parent
-      .command(action)
-      .argument('<id>', 'instance name or short id', { complete: instances })
-      .description(`${DESCRIPTION[action]} an instance`)
-      .option('--profile <name>', 'profile to use', { complete: profiles })
-      .action(async (rawId: string, options: { profile?: string; yes?: boolean }, cmd: Command) => {
-        const ctx = createContext(cmd);
-        const auth = await resolveAuth(options.profile);
-        const client = new CloudClient(auth.apiBase, auth.apiKey);
-        const id = await resolveInstanceId(client, rawId);
+function instanceActionCommand(action: InstanceAction): CliCommand {
+  const command = new CliCommand(action)
+    .argument('<id>', 'instance name or short id', { complete: instances })
+    .description(`${DESCRIPTION[action]} an instance`)
+    .option('--profile <name>', 'profile to use', { complete: profiles })
+    .action(async (rawId: string, options: { profile?: string; yes?: boolean }, cmd: Command) => {
+      const ctx = createContext(cmd);
+      const auth = await resolveAuth(options.profile);
+      const client = new CloudClient(auth.apiBase, auth.apiKey);
+      const id = await resolveInstanceId(client, rawId);
 
-        if (action === 'delete') {
-          await requireDeletion(ctx, `instance ${rawId}`, Boolean(options.yes));
-        }
+      if (action === 'delete') {
+        await requireDeletion(ctx, `instance ${rawId}`, Boolean(options.yes));
+      }
 
-        const instance = await ctx.spin(`${PROGRESS_LABEL[action]} instance`, () =>
-          client.instanceAction(id, action));
+      const instance = await ctx.spin(`${PROGRESS_LABEL[action]} instance`, () =>
+        client.instanceAction(id, action));
 
-        if (action === 'delete') {
-          ctx.success(`Instance deletion started for ${instance.name} (${instance.shortId}).`);
-        } else {
-          ctx.success(`Instance ${instance.name} ${PAST_TENSE[action]}.`);
-        }
+      if (action === 'delete') {
+        ctx.success(`Instance deletion started for ${instance.name} (${instance.shortId}).`);
+      } else {
+        ctx.success(`Instance ${instance.name} ${PAST_TENSE[action]}.`);
+      }
 
-        ctx.output(instance, item => ({ text: `STATE ${item.state}` }));
-      });
+      ctx.output(instance, item => ({ text: `STATE ${item.state}` }));
+    });
 
-    if (action === 'delete') {
-      command.option('--yes', 'skip confirmation');
-    }
+  if (action === 'delete') {
+    command.option('--yes', 'skip confirmation');
   }
+
+  return command;
 }
+
+export const instanceStartCommand = instanceActionCommand('start');
+export const instanceStopCommand = instanceActionCommand('stop');
+export const instanceRestartCommand = instanceActionCommand('restart');
+export const instanceDeleteCommand = instanceActionCommand('delete');

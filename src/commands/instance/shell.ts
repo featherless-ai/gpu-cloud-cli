@@ -1,7 +1,7 @@
 import type { Command } from 'commander';
-import type { CliCommand } from '../../completions';
+import { CliCommand } from '../../completions';
 import { createContext } from '../../context';
-import { resolveAuth, consoleBaseUrl } from '../../config';
+import { resolveAuth } from '../../config';
 import { CloudClient, type TerminalSession } from '../../clients/cloud';
 import { instances, resolveInstanceId, profiles } from '../shared';
 
@@ -187,86 +187,83 @@ function detachStdio(): void {
   process.stdin.pause();
 }
 
-export function registerInstanceShellCommand(parent: CliCommand): void {
-  parent
-    .command('shell')
-    .argument('<id>', 'instance name or short id', { complete: instances })
-    .description('Open an interactive shell in the instance (the shared tmux session "default")')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .action(async (rawId: string, options: { profile?: string }, cmd: Command) => {
-      const ctx = createContext(cmd);
+export const instanceShellCommand = new CliCommand('shell')
+  .argument('<id>', 'instance name or short id', { complete: instances })
+  .description('Open an interactive shell in the instance (the shared tmux session "default")')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .action(async (rawId: string, options: { profile?: string }, cmd: Command) => {
+    const ctx = createContext(cmd);
 
-      if (ctx.mode === 'json' || !process.stdin.isTTY || !process.stdout.isTTY) {
-        ctx.fatal('instance shell needs an interactive terminal.');
+    if (ctx.mode === 'json' || !process.stdin.isTTY || !process.stdout.isTTY) {
+      ctx.fatal('instance shell needs an interactive terminal.');
+    }
+
+    const auth = await resolveAuth(options.profile);
+    const client = new CloudClient(auth.apiBase, auth.apiKey);
+    const id = await resolveInstanceId(client, rawId);
+
+    const instance = await client.getInstance(id);
+
+    if (instance.state !== 'running') {
+      ctx.fatal(`Instance ${instance.name} is ${instance.state}. Start it first: featherless-cloud instance start ${instance.shortId}`);
+    }
+
+    const keys = await client.sshKeys().catch(() => []);
+
+    if (keys.length === 0) {
+      ctx.warn('No SSH keys registered — web terminal only. Add one with featherless-cloud ssh-keys add.');
+    }
+
+    const columns = clamp(process.stdout.columns, 80);
+    const rows = clamp(process.stdout.rows, 24);
+
+    let retry = 0;
+    let hadReadyChain = false;
+    let tmuxSessionId: string | undefined;
+
+    for (;;) {
+      // A fresh grant on reconnect reattaches the exact session it attached
+      // to; a vanished tmux session is never recreated.
+      const session = await client.createTerminalSession(
+        id,
+        columns,
+        rows,
+        tmuxSessionId ? { tmuxSessionId } : { tmux: 'default' },
+      );
+
+      tmuxSessionId = session.tmuxSession?.id ?? tmuxSessionId;
+      // Tokens are single-use with a 15s TTL: connect immediately after mint.
+      const result = await runSession(auth.apiBase, session, columns, rows);
+
+      if (result.exitStatus !== null) {
+        process.exit(result.exitStatus);
       }
 
-      const auth = await resolveAuth(options.profile);
-      const client = new CloudClient(auth.apiBase, auth.apiKey);
-      const id = await resolveInstanceId(client, rawId);
-
-      const instance = await client.getInstance(id);
-
-      if (instance.state !== 'running') {
-        ctx.fatal(`Instance ${instance.name} is ${instance.state}. Start it first: featherless-cloud instance start ${instance.shortId}`);
+      if (result.reachedReady) {
+        hadReadyChain = true;
       }
 
-      const keys = await client.sshKeys().catch(() => []);
+      const retryable = RETRYABLE_CODES.has(result.closeCode) && hadReadyChain && retry < RETRY_DELAYS_MS.length;
 
-      if (keys.length === 0) {
-        ctx.warn(`No SSH keys registered — web terminal only. Add keys at ${consoleBaseUrl()}/credentials/ssh-keys.`);
+      if (retryable) {
+        ctx.log(CLOSE_MESSAGES[result.closeCode] ?? 'Terminal connection lost.');
+        await sleep(RETRY_DELAYS_MS[retry] ?? 2_000);
+        retry += 1;
+        continue;
       }
 
-      const columns = clamp(process.stdout.columns, 80);
-      const rows = clamp(process.stdout.rows, 24);
+      // The server's 4007 text points at the browser's session list.
+      const message = (result.closeCode === 4007 ? CLOSE_MESSAGES[4007] : result.serverError)
+        ?? CLOSE_MESSAGES[result.closeCode]
+        ?? 'Terminal closed.';
 
-      let retry = 0;
-      let hadReadyChain = false;
-      let tmuxSessionId: string | undefined;
-
-      for (;;) {
-        // A fresh grant on reconnect reattaches the exact session it attached
-        // to; a vanished tmux session is never recreated.
-        const session = await client.createTerminalSession(
-          id,
-          columns,
-          rows,
-          tmuxSessionId ? { tmuxSessionId } : { tmux: 'default' },
-        );
-
-        tmuxSessionId = session.tmuxSession?.id ?? tmuxSessionId;
-        // Tokens are single-use with a 15s TTL: connect immediately after mint.
-        const result = await runSession(auth.apiBase, session, columns, rows);
-
-        if (result.exitStatus !== null) {
-          process.exit(result.exitStatus);
-        }
-
-        if (result.reachedReady) {
-          hadReadyChain = true;
-        }
-
-        const retryable = RETRYABLE_CODES.has(result.closeCode) && hadReadyChain && retry < RETRY_DELAYS_MS.length;
-
-        if (retryable) {
-          ctx.log(CLOSE_MESSAGES[result.closeCode] ?? 'Terminal connection lost.');
-          await sleep(RETRY_DELAYS_MS[retry] ?? 2_000);
-          retry += 1;
-          continue;
-        }
-
-        // The server's 4007 text points at the browser's session list.
-        const message = (result.closeCode === 4007 ? CLOSE_MESSAGES[4007] : result.serverError)
-          ?? CLOSE_MESSAGES[result.closeCode]
-          ?? 'Terminal closed.';
-
-        if (result.closeCode === 1000) {
-          detachStdio();
-          process.exit(0);
-        }
-
-        ctx.error(message);
+      if (result.closeCode === 1000) {
         detachStdio();
-        process.exit(1);
+        process.exit(0);
       }
-    });
-}
+
+      ctx.error(message);
+      detachStdio();
+      process.exit(1);
+    }
+  });

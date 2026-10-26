@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Option, type Command } from 'commander';
-import type { CliCommand, Completer } from '../../completions';
+import { CliCommand, SCHEME, type Completer } from '../../completions';
 import { createContext, type CliContext } from '../../context';
 import { resolveAuth } from '../../config';
 import { CloudClient } from '../../clients/cloud';
@@ -18,7 +18,6 @@ export const DEFAULT_CONCURRENCY = 16;
 const MAX_VOLUMES = 3;
 /** Longest typed prefix that still completes to the scheme, e.g. `vol` → `vol://`. */
 const SCHEME_PREFIX = 3;
-export const SCHEME = 'vol://';
 const ADDRESS_HINT = 'Write volume paths as vol://<volume>/<path>.';
 
 /** A volume path as people type it: leading and trailing slashes are dropped. */
@@ -791,264 +790,256 @@ export async function find(ctx: CliContext, data: VolumeFiles, address: VolumeAd
   emit(ctx, entries, () => listing(entries.map(entry => (entry.type === 'directory' ? { at: entry.modifiedAt, name: name(entry) } : { at: entry.modifiedAt, bytes: entry.sizeBytes ?? 0, name: name(entry) })), Boolean(options.human)));
 }
 
-export function registerVolumeFileCommands(volume: CliCommand): void {
-  volume
-    .command('ls')
-    .argument('[path]', 'vol://<volume>/<path> folder', { complete: volumePaths })
-    .description('List your volumes, or a folder in one (vol://<volume>/<path>)')
-    .option('-h, --human-readable', 'sizes like 1.5 KiB and 100.0 MiB instead of bytes')
-    .option('-r, --recursive', 'list everything below the folder, by path from the volume root')
-    .option('--summarize', 'end with the number of files and their total size')
-    // Listings always show details and hidden files; these keep `ls -al` habits working.
-    .addOption(new Option('-a, --all').hideHelp())
-    .addOption(new Option('-l, --long').hideHelp())
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .action(async (target: string | undefined, options: {
-      humanReadable?: boolean; recursive?: boolean; summarize?: boolean; profile?: string;
-    }, cmd: Command) => {
-      const ctx = createContext(cmd);
-      const human = Boolean(options.humanReadable);
+export const volumeLsCommand = new CliCommand('ls')
+  .argument('[path]', 'vol://<volume>/<path> folder', { complete: volumePaths })
+  .description('List your volumes, or a folder in one (vol://<volume>/<path>)')
+  .option('-h, --human-readable', 'sizes like 1.5 KiB and 100.0 MiB instead of bytes')
+  .option('-r, --recursive', 'list everything below the folder, by path from the volume root')
+  .option('--summarize', 'end with the number of files and their total size')
+  // Listings always show details and hidden files; these keep `ls -al` habits working.
+  .addOption(new Option('-a, --all').hideHelp())
+  .addOption(new Option('-l, --long').hideHelp())
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .action(async (target: string | undefined, options: {
+    humanReadable?: boolean; recursive?: boolean; summarize?: boolean; profile?: string;
+  }, cmd: Command) => {
+    const ctx = createContext(cmd);
+    const human = Boolean(options.humanReadable);
 
-      if (!target || target === SCHEME) {
-        const auth = await resolveAuth(options.profile);
-        const volumes = await new CloudClient(auth.apiBase, auth.apiKey).listVolumes();
-        emit(ctx, volumes, () => listing(volumes.map(volume => ({ at: volume.createdAt, bytes: volume.capacityGiB * 1024 ** 3, name: `${SCHEME}${volume.name}` })), human));
+    if (!target || target === SCHEME) {
+      const auth = await resolveAuth(options.profile);
+      const volumes = await new CloudClient(auth.apiBase, auth.apiKey).listVolumes();
+      emit(ctx, volumes, () => listing(volumes.map(volume => ({ at: volume.createdAt, bytes: volume.capacityGiB * 1024 ** 3, name: `${SCHEME}${volume.name}` })), human));
+      return;
+    }
+
+    const address = volumeAddress(target);
+    const { files } = await filesFor([address.volume], options.profile);
+    const line = (item: FileEntry, name: string): ListingLine => (item.type === 'directory' ? { at: item.modifiedAt, name: `${name}/` } : { at: item.modifiedAt, bytes: item.sizeBytes ?? 0, name });
+    const entries: FileEntry[] = [];
+    const lines: ListingLine[] = [];
+
+    if (options.recursive) {
+      const walk = async (folder: string) => {
+        for (const child of await files.list(folder)) {
+          entries.push(child);
+
+          if (child.type === 'directory') {
+            await walk(child.path);
+          }
+        }
+      };
+
+      await walk(address.path);
+      lines.push(...entries.map(item => line(item, item.path)));
+    } else {
+      const parent = address.path.includes('/') ? address.path.slice(0, address.path.lastIndexOf('/')) : '';
+      const [listed, self, above] = await Promise.all([files.list(address.path), files.entry(address.path), address.path ? files.entry(parent) : null]);
+      entries.push(...listed);
+
+      for (const [item, name] of [[self, '.'], [above, '..']] as const) {
+        if (item) {
+          lines.push(line(item, name));
+        }
+      }
+
+      lines.push(...entries.map(item => line(item, item.name)));
+    }
+
+    emit(ctx, entries, () => {
+      if (!options.summarize) {
+        return listing(lines, human);
+      }
+
+      const sizes = entries.filter(item => item.type === 'file').map(item => item.sizeBytes ?? 0);
+      const total = sizes.reduce((sum, size) => sum + size, 0);
+      return [...listing(lines, human), '', `Total Files: ${sizes.length}`, ` Total Size: ${human ? formatSize(total) : total}`];
+    });
+  });
+
+export const volumeFindCommand = new CliCommand('find')
+  .argument('<path>', 'vol://<volume>/<path> folder to search', { complete: volumePaths })
+  .description('Find files and folders below a folder in a volume (vol://<volume>/<path>), printing each as it is found')
+  .option('--name <pattern>', 'names matching a pattern like "*.safetensors": * matches any characters, ? one, [abc] one of those')
+  .option('--iname <pattern>', 'like --name, ignoring case')
+  .option('--type <f|d>', 'only files (f) or only folders (d)', { choices: ['f', 'd'] })
+  .option('--maxdepth <n>', 'how many levels below the folder to look')
+  .option('--size <+n|-n>', 'more (+) or less (-) than a size like 10G or 512K; repeat for a range', (value: string, previous: string[] | undefined) => [...(previous ?? []), value])
+  .option('--newer-than <age>', 'modified within an age like 30m, 12h or 7d')
+  .option('--older-than <age>', 'modified longer ago than an age like 30m, 12h or 7d')
+  .option('-l, --long', 'print each with its modification time and size, like ls')
+  .option('-h, --human-readable', 'with -l, sizes like 1.5 KiB and 100.0 MiB instead of bytes')
+  .option('-0, --print0', 'end each with a NUL instead of a newline, for xargs -0')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .action(async (target: string, options: {
+    name?: string; iname?: string; type?: 'f' | 'd'; maxdepth?: string; size?: string[]; newerThan?: string; olderThan?: string;
+    long?: boolean; humanReadable?: boolean; print0?: boolean; profile?: string;
+  }, cmd: Command) => {
+    const ctx = createContext(cmd);
+    const maxDepth = options.maxdepth === undefined ? undefined : Number(options.maxdepth);
+
+    if (options.name !== undefined && options.iname !== undefined) {
+      throw new CliError('Pass --name or --iname, not both.');
+    }
+
+    if (maxDepth !== undefined && (!Number.isInteger(maxDepth) || maxDepth < 1)) {
+      throw new CliError('--maxdepth takes a whole number of levels, 1 or more.');
+    }
+
+    const address = volumeAddress(target);
+    const now = Date.now();
+
+    const filters: FindFilters = {
+      name: options.name ?? options.iname,
+      ignoreCase: options.iname !== undefined,
+      type: options.type === undefined ? undefined : ({ f: 'file', d: 'directory' } as const)[options.type],
+      maxDepth,
+      ...parseSizes(options.size ?? []),
+      modifiedAfter: options.newerThan === undefined ? undefined : new Date(now - parseAge(options.newerThan)),
+      modifiedBefore: options.olderThan === undefined ? undefined : new Date(now - parseAge(options.olderThan)),
+    };
+
+    const data = await filesFor([address.volume], options.profile);
+    await find(ctx, data, address, filters, { long: options.long, human: options.humanReadable, print0: options.print0 });
+  });
+
+export const volumeMkdirCommand = new CliCommand('mkdir')
+  .argument('<paths...>', 'vol:// folders to create', { complete: volumePaths })
+  .description('Create folders in a volume')
+  .option('-p, --parents', 'create missing parent folders')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .action(async (targets: string[], options: { parents?: boolean; profile?: string }, cmd: Command) => {
+    const ctx = createContext(cmd);
+    const addresses = targets.map(volumeAddress);
+    const { files, volumeName } = await filesFor(addresses.map(address => address.volume), options.profile);
+
+    const created: FileEntry[] = [];
+
+    for (const address of addresses) {
+      created.push(await files.mkdir(address.path, Boolean(options.parents)));
+    }
+
+    emit(ctx, created, () => []);
+  });
+
+export const volumeRmCommand = new CliCommand('rm')
+  .argument('<paths...>', 'vol:// files or folders', { complete: volumePaths })
+  .description('Delete files or folders in a volume')
+  .option('-r, --recursive', 'delete folders and everything in them')
+  .option('--yes', 'skip confirmation')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .action(async (targets: string[], options: { recursive?: boolean; yes?: boolean; profile?: string }, cmd: Command) => {
+    const ctx = createContext(cmd);
+    const addresses = targets.map(volumeAddress);
+
+    if (addresses.some(address => !address.path)) {
+      throw new CliError('Refusing to delete the volume root. Delete the volume itself with volume delete.');
+    }
+
+    const { files, volumeName } = await filesFor(addresses.map(address => address.volume), options.profile);
+    const label = addresses.map(address => shown(volumeName, address.path)).join(', ');
+
+    // Only a person at a terminal can answer the prompt.
+    if (!options.yes && !process.stdin.isTTY) {
+      throw new CliError(`Refusing to delete ${label} without --yes.`);
+    }
+
+    await requireDeletion(ctx, label, Boolean(options.yes));
+
+    for (const address of addresses) {
+      try {
+        await files.remove(address.path, Boolean(options.recursive));
+      } catch (error) {
+        if (error instanceof FileApiError && error.code === 'directory_not_empty') {
+          throw new CliError(`${shown(volumeName, address.path)} is a folder that is not empty. Pass -r to delete it and everything in it.`);
+        }
+
+        throw error;
+      }
+    }
+  });
+
+export const volumeCpCommand = new CliCommand('cp')
+  .argument('<paths...>', 'sources, then the destination: local or vol:// paths', { complete: volumePaths })
+  .usage('[options] <sources...> <destination>')
+  .description('Copy files or folders between this computer and a volume, or between volumes; interrupted copies resume when run again')
+  .option('-r, --recursive', 'copy folders and everything in them')
+  .option('--overwrite', 'replace files that already exist at the destination')
+  .option('--update', 'skip files whose size and modification time already match')
+  .option('--concurrency <n>', `files at a time, 1 to ${MAX_CONCURRENCY}`, String(DEFAULT_CONCURRENCY))
+  .option('--dry-run', 'show what would be copied')
+  .option('-v, --verbose', 'print each file as it is copied')
+  .option('--progress', 'show a running total on stderr')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .addHelpText('after', '\nExamples:\n  featherless-cloud volume cp -r ./weights vol://datasets/models/\n  featherless-cloud volume cp vol://datasets/models/out.bin .\n  featherless-cloud volume cp -r vol://datasets/models vol://checkpoints/')
+  .action(async (paths: string[], options: {
+    recursive?: boolean; overwrite?: boolean; update?: boolean; concurrency?: string; dryRun?: boolean; verbose?: boolean; progress?: boolean; profile?: string;
+  }, cmd: Command) => {
+    const ctx = createContext(cmd);
+    const plan = direction(paths);
+    const copy = { ...options, limit: concurrency(options.concurrency) };
+
+    if (plan.kind === 'within') {
+      const source = await filesFor(plan.sources.map(address => address.volume), options.profile, 'Name sources in one volume at a time.');
+      finish(ctx, await between(ctx, { ...source, paths: plan.sources }, await filesFor([plan.destination.volume], options.profile), plan.destination, copy), Boolean(options.dryRun));
+    } else if (plan.kind === 'upload') {
+      finish(ctx, await upload(ctx, await filesFor([plan.destination.volume], options.profile), plan.sources, plan.destination, copy), Boolean(options.dryRun));
+    } else {
+      finish(ctx, await download(ctx, await filesFor(plan.sources.map(source => source.volume), options.profile), plan.sources, plan.destination, copy), Boolean(options.dryRun));
+    }
+  });
+
+export const volumeMvCommand = new CliCommand('mv')
+  .argument('<paths...>', 'sources, then the destination: local or vol:// paths', { complete: volumePaths })
+  .usage('[options] <sources...> <destination>')
+  .description('Move files or folders inside a volume, between volumes, or between this computer and a volume')
+  .option('--overwrite', 'replace files at the destination')
+  .option('--concurrency <n>', `files at a time, 1 to ${MAX_CONCURRENCY}`, String(DEFAULT_CONCURRENCY))
+  .option('-v, --verbose', 'print each file as it is moved')
+  .option('--progress', 'show a running total on stderr')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .action(async (paths: string[], options: {
+    overwrite?: boolean; concurrency?: string; verbose?: boolean; progress?: boolean; profile?: string;
+  }, cmd: Command) => {
+    const ctx = createContext(cmd);
+    const plan = direction(paths);
+
+    if (plan.kind !== 'upload' && plan.sources.some(source => !source.path)) {
+      throw new CliError('Refusing to move a volume root. Name the files or folders in it.');
+    }
+
+    const copy = {
+      overwrite: options.overwrite, limit: concurrency(options.concurrency), move: true, verbose: options.verbose, progress: options.progress,
+    };
+
+    if (plan.kind === 'within') {
+      const from = await filesFor(plan.sources.map(address => address.volume), options.profile, 'Name sources in one volume at a time.');
+      const into = await filesFor([plan.destination.volume], options.profile);
+
+      // Each volume is separate storage: another volume gets a copy, then the source is deleted.
+      if (into.files.volumeId !== from.files.volumeId) {
+        finish(ctx, await between(ctx, { ...from, paths: plan.sources }, into, plan.destination, copy), false);
         return;
       }
 
-      const address = volumeAddress(target);
-      const { files } = await filesFor([address.volume], options.profile);
-      const line = (item: FileEntry, name: string): ListingLine => (item.type === 'directory' ? { at: item.modifiedAt, name: `${name}/` } : { at: item.modifiedAt, bytes: item.sizeBytes ?? 0, name });
-      const entries: FileEntry[] = [];
-      const lines: ListingLine[] = [];
+      const { files, volumeName } = from;
+      const existing = plan.destination.folder ? null : await files.entry(plan.destination.path);
+      const intoFolder = plan.destination.folder || existing?.type === 'directory';
+      requireFolder(intoFolder, plan.sources.length, shown(volumeName, plan.destination.path));
+      const moved: FileEntry[] = [];
 
-      if (options.recursive) {
-        const walk = async (folder: string) => {
-          for (const child of await files.list(folder)) {
-            entries.push(child);
-
-            if (child.type === 'directory') {
-              await walk(child.path);
-            }
-          }
-        };
-
-        await walk(address.path);
-        lines.push(...entries.map(item => line(item, item.path)));
-      } else {
-        const parent = address.path.includes('/') ? address.path.slice(0, address.path.lastIndexOf('/')) : '';
-        const [listed, self, above] = await Promise.all([files.list(address.path), files.entry(address.path), address.path ? files.entry(parent) : null]);
-        entries.push(...listed);
-
-        for (const [item, name] of [[self, '.'], [above, '..']] as const) {
-          if (item) {
-            lines.push(line(item, name));
-          }
-        }
-
-        lines.push(...entries.map(item => line(item, item.name)));
+      for (const source of plan.sources) {
+        const target = join(plan.destination.path, under(intoFolder, source.path.split('/').at(-1)!, ''));
+        moved.push(await files.move(source.path, target, Boolean(options.overwrite)));
       }
 
-      emit(ctx, entries, () => {
-        if (!options.summarize) {
-          return listing(lines, human);
-        }
+      emit(ctx, moved, () => (options.verbose ? moved.map((item, index) => `${shown(volumeName, plan.sources[index]!.path)} -> ${shown(volumeName, item.path)}`) : []));
+      return;
+    }
 
-        const sizes = entries.filter(item => item.type === 'file').map(item => item.sizeBytes ?? 0);
-        const total = sizes.reduce((sum, size) => sum + size, 0);
-        return [...listing(lines, human), '', `Total Files: ${sizes.length}`, ` Total Size: ${human ? formatSize(total) : total}`];
-      });
-    });
-
-  volume
-    .command('find')
-    .argument('<path>', 'vol://<volume>/<path> folder to search', { complete: volumePaths })
-    .description('Find files and folders below a folder in a volume (vol://<volume>/<path>), printing each as it is found')
-    .option('--name <pattern>', 'names matching a pattern like "*.safetensors": * matches any characters, ? one, [abc] one of those')
-    .option('--iname <pattern>', 'like --name, ignoring case')
-    .option('--type <f|d>', 'only files (f) or only folders (d)', { choices: ['f', 'd'] })
-    .option('--maxdepth <n>', 'how many levels below the folder to look')
-    .option('--size <+n|-n>', 'more (+) or less (-) than a size like 10G or 512K; repeat for a range', (value: string, previous: string[] | undefined) => [...(previous ?? []), value])
-    .option('--newer-than <age>', 'modified within an age like 30m, 12h or 7d')
-    .option('--older-than <age>', 'modified longer ago than an age like 30m, 12h or 7d')
-    .option('-l, --long', 'print each with its modification time and size, like ls')
-    .option('-h, --human-readable', 'with -l, sizes like 1.5 KiB and 100.0 MiB instead of bytes')
-    .option('-0, --print0', 'end each with a NUL instead of a newline, for xargs -0')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .action(async (target: string, options: {
-      name?: string; iname?: string; type?: 'f' | 'd'; maxdepth?: string; size?: string[]; newerThan?: string; olderThan?: string;
-      long?: boolean; humanReadable?: boolean; print0?: boolean; profile?: string;
-    }, cmd: Command) => {
-      const ctx = createContext(cmd);
-      const maxDepth = options.maxdepth === undefined ? undefined : Number(options.maxdepth);
-
-      if (options.name !== undefined && options.iname !== undefined) {
-        throw new CliError('Pass --name or --iname, not both.');
-      }
-
-      if (maxDepth !== undefined && (!Number.isInteger(maxDepth) || maxDepth < 1)) {
-        throw new CliError('--maxdepth takes a whole number of levels, 1 or more.');
-      }
-
-      const address = volumeAddress(target);
-      const now = Date.now();
-
-      const filters: FindFilters = {
-        name: options.name ?? options.iname,
-        ignoreCase: options.iname !== undefined,
-        type: options.type === undefined ? undefined : ({ f: 'file', d: 'directory' } as const)[options.type],
-        maxDepth,
-        ...parseSizes(options.size ?? []),
-        modifiedAfter: options.newerThan === undefined ? undefined : new Date(now - parseAge(options.newerThan)),
-        modifiedBefore: options.olderThan === undefined ? undefined : new Date(now - parseAge(options.olderThan)),
-      };
-
-      const data = await filesFor([address.volume], options.profile);
-      await find(ctx, data, address, filters, { long: options.long, human: options.humanReadable, print0: options.print0 });
-    });
-
-  volume
-    .command('mkdir')
-    .argument('<paths...>', 'vol:// folders to create', { complete: volumePaths })
-    .description('Create folders in a volume')
-    .option('-p, --parents', 'create missing parent folders')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .action(async (targets: string[], options: { parents?: boolean; profile?: string }, cmd: Command) => {
-      const ctx = createContext(cmd);
-      const addresses = targets.map(volumeAddress);
-      const { files, volumeName } = await filesFor(addresses.map(address => address.volume), options.profile);
-
-      const created: FileEntry[] = [];
-
-      for (const address of addresses) {
-        created.push(await files.mkdir(address.path, Boolean(options.parents)));
-      }
-
-      emit(ctx, created, () => []);
-    });
-
-  volume
-    .command('rm')
-    .argument('<paths...>', 'vol:// files or folders', { complete: volumePaths })
-    .description('Delete files or folders in a volume')
-    .option('-r, --recursive', 'delete folders and everything in them')
-    .option('--yes', 'skip confirmation')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .action(async (targets: string[], options: { recursive?: boolean; yes?: boolean; profile?: string }, cmd: Command) => {
-      const ctx = createContext(cmd);
-      const addresses = targets.map(volumeAddress);
-
-      if (addresses.some(address => !address.path)) {
-        throw new CliError('Refusing to delete the volume root. Delete the volume itself with volume delete.');
-      }
-
-      const { files, volumeName } = await filesFor(addresses.map(address => address.volume), options.profile);
-      const label = addresses.map(address => shown(volumeName, address.path)).join(', ');
-
-      // Only a person at a terminal can answer the prompt.
-      if (!options.yes && !process.stdin.isTTY) {
-        throw new CliError(`Refusing to delete ${label} without --yes.`);
-      }
-
-      await requireDeletion(ctx, label, Boolean(options.yes));
-
-      for (const address of addresses) {
-        try {
-          await files.remove(address.path, Boolean(options.recursive));
-        } catch (error) {
-          if (error instanceof FileApiError && error.code === 'directory_not_empty') {
-            throw new CliError(`${shown(volumeName, address.path)} is a folder that is not empty. Pass -r to delete it and everything in it.`);
-          }
-
-          throw error;
-        }
-      }
-    });
-
-  volume
-    .command('cp')
-    .argument('<paths...>', 'sources, then the destination: local or vol:// paths', { complete: volumePaths })
-    .usage('[options] <sources...> <destination>')
-    .description('Copy files or folders between this computer and a volume, or between volumes; interrupted copies resume when run again')
-    .option('-r, --recursive', 'copy folders and everything in them')
-    .option('--overwrite', 'replace files that already exist at the destination')
-    .option('--update', 'skip files whose size and modification time already match')
-    .option('--concurrency <n>', `files at a time, 1 to ${MAX_CONCURRENCY}`, String(DEFAULT_CONCURRENCY))
-    .option('--dry-run', 'show what would be copied')
-    .option('-v, --verbose', 'print each file as it is copied')
-    .option('--progress', 'show a running total on stderr')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .addHelpText('after', '\nExamples:\n  featherless-cloud volume cp -r ./weights vol://datasets/models/\n  featherless-cloud volume cp vol://datasets/models/out.bin .\n  featherless-cloud volume cp -r vol://datasets/models vol://checkpoints/')
-    .action(async (paths: string[], options: {
-      recursive?: boolean; overwrite?: boolean; update?: boolean; concurrency?: string; dryRun?: boolean; verbose?: boolean; progress?: boolean; profile?: string;
-    }, cmd: Command) => {
-      const ctx = createContext(cmd);
-      const plan = direction(paths);
-      const copy = { ...options, limit: concurrency(options.concurrency) };
-
-      if (plan.kind === 'within') {
-        const source = await filesFor(plan.sources.map(address => address.volume), options.profile, 'Name sources in one volume at a time.');
-        finish(ctx, await between(ctx, { ...source, paths: plan.sources }, await filesFor([plan.destination.volume], options.profile), plan.destination, copy), Boolean(options.dryRun));
-      } else if (plan.kind === 'upload') {
-        finish(ctx, await upload(ctx, await filesFor([plan.destination.volume], options.profile), plan.sources, plan.destination, copy), Boolean(options.dryRun));
-      } else {
-        finish(ctx, await download(ctx, await filesFor(plan.sources.map(source => source.volume), options.profile), plan.sources, plan.destination, copy), Boolean(options.dryRun));
-      }
-    });
-
-  volume
-    .command('mv')
-    .argument('<paths...>', 'sources, then the destination: local or vol:// paths', { complete: volumePaths })
-    .usage('[options] <sources...> <destination>')
-    .description('Move files or folders inside a volume, between volumes, or between this computer and a volume')
-    .option('--overwrite', 'replace files at the destination')
-    .option('--concurrency <n>', `files at a time, 1 to ${MAX_CONCURRENCY}`, String(DEFAULT_CONCURRENCY))
-    .option('-v, --verbose', 'print each file as it is moved')
-    .option('--progress', 'show a running total on stderr')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .action(async (paths: string[], options: {
-      overwrite?: boolean; concurrency?: string; verbose?: boolean; progress?: boolean; profile?: string;
-    }, cmd: Command) => {
-      const ctx = createContext(cmd);
-      const plan = direction(paths);
-
-      if (plan.kind !== 'upload' && plan.sources.some(source => !source.path)) {
-        throw new CliError('Refusing to move a volume root. Name the files or folders in it.');
-      }
-
-      const copy = {
-        overwrite: options.overwrite, limit: concurrency(options.concurrency), move: true, verbose: options.verbose, progress: options.progress,
-      };
-
-      if (plan.kind === 'within') {
-        const from = await filesFor(plan.sources.map(address => address.volume), options.profile, 'Name sources in one volume at a time.');
-        const into = await filesFor([plan.destination.volume], options.profile);
-
-        // Each volume is separate storage: another volume gets a copy, then the source is deleted.
-        if (into.files.volumeId !== from.files.volumeId) {
-          finish(ctx, await between(ctx, { ...from, paths: plan.sources }, into, plan.destination, copy), false);
-          return;
-        }
-
-        const { files, volumeName } = from;
-        const existing = plan.destination.folder ? null : await files.entry(plan.destination.path);
-        const intoFolder = plan.destination.folder || existing?.type === 'directory';
-        requireFolder(intoFolder, plan.sources.length, shown(volumeName, plan.destination.path));
-        const moved: FileEntry[] = [];
-
-        for (const source of plan.sources) {
-          const target = join(plan.destination.path, under(intoFolder, source.path.split('/').at(-1)!, ''));
-          moved.push(await files.move(source.path, target, Boolean(options.overwrite)));
-        }
-
-        emit(ctx, moved, () => (options.verbose ? moved.map((item, index) => `${shown(volumeName, plan.sources[index]!.path)} -> ${shown(volumeName, item.path)}`) : []));
-        return;
-      }
-
-      if (plan.kind === 'upload') {
-        finish(ctx, await upload(ctx, await filesFor([plan.destination.volume], options.profile), plan.sources, plan.destination, copy), false);
-      } else {
-        finish(ctx, await download(ctx, await filesFor(plan.sources.map(source => source.volume), options.profile), plan.sources, plan.destination, copy), false);
-      }
-    });
-}
+    if (plan.kind === 'upload') {
+      finish(ctx, await upload(ctx, await filesFor([plan.destination.volume], options.profile), plan.sources, plan.destination, copy), false);
+    } else {
+      finish(ctx, await download(ctx, await filesFor(plan.sources.map(source => source.volume), options.profile), plan.sources, plan.destination, copy), false);
+    }
+  });

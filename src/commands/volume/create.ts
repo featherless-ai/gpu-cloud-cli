@@ -1,5 +1,5 @@
 import type { Command } from 'commander';
-import type { CliCommand } from '../../completions';
+import { CliCommand } from '../../completions';
 import { profiles } from '../shared';
 import { createContext } from '../../context';
 import { resolveAuth } from '../../config';
@@ -31,50 +31,48 @@ function parseCapacity(value: string | undefined): number {
   return capacity;
 }
 
-export function registerVolumeCreateCommand(parent: CliCommand): void {
-  parent
-    .command('create <name>')
-    .description('Create a network volume')
-    .option('--gb <n>', 'capacity in GB (10-10240)', '100')
-    .option('--wait', 'wait until the volume is usable')
-    .option('--profile <name>', 'profile to use', { complete: profiles })
-    .action(async (name: string, options: { gb: string; wait?: boolean; profile?: string }, cmd: Command) => {
-      const ctx = createContext(cmd);
-      const auth = await resolveAuth(options.profile);
-      const client = new CloudClient(auth.apiBase, auth.apiKey);
+export const volumeCreateCommand = new CliCommand('create')
+  .argument('<name>')
+  .description('Create a network volume')
+  .option('--gb <n>', 'capacity in GB (10-10240)', '100')
+  .option('--wait', 'wait until the volume is usable')
+  .option('--profile <name>', 'profile to use', { complete: profiles })
+  .action(async (name: string, options: { gb: string; wait?: boolean; profile?: string }, cmd: Command) => {
+    const ctx = createContext(cmd);
+    const auth = await resolveAuth(options.profile);
+    const client = new CloudClient(auth.apiBase, auth.apiKey);
 
-      const volume = await ctx.spin('Creating volume', () =>
-        client.createVolume({ name, capacityGiB: parseCapacity(options.gb) }, crypto.randomUUID()));
+    const volume = await ctx.spin('Creating volume', () =>
+      client.createVolume({ name, capacityGiB: parseCapacity(options.gb) }, crypto.randomUUID()));
 
-      let final = volume;
+    let final = volume;
 
-      if (options.wait) {
-        for (let attempt = 0; attempt < WAIT_MAX_POLLS; attempt += 1) {
-          if (final.state === 'available' || final.state === 'in_use') {
-            break;
-          }
-
-          if (final.state === 'error') {
-            break;
-          }
-
-          await sleep(WAIT_POLL_MS);
-          final = await client.getVolume(volume.id);
+    if (options.wait) {
+      for (let attempt = 0; attempt < WAIT_MAX_POLLS; attempt += 1) {
+        if (final.state === 'available' || final.state === 'in_use') {
+          break;
         }
-      }
 
-      if (final.state === 'error') {
-        ctx.fatal(`Volume ${final.name} failed to provision: ${final.lastError ?? 'unknown error'}`);
-      }
+        if (final.state === 'error') {
+          break;
+        }
 
-      if (final.state === 'available' || final.state === 'in_use') {
-        ctx.success(`Network volume ${final.name} is ready.`);
-      } else if (options.wait) {
-        ctx.warn(`Volume ${final.name} is still ${final.state}. Check with featherless-cloud volume get ${final.id}.`);
-      } else {
-        ctx.success(`Network volume ${final.name} is provisioning. It becomes usable automatically — check with featherless-cloud volume get.`);
+        await sleep(WAIT_POLL_MS);
+        final = await client.getVolume(volume.id);
       }
+    }
 
-      ctx.output(final, (item: NetworkVolumeDto) => ({ text: `STATE ${item.state}` }));
-    });
-}
+    if (final.state === 'error') {
+      ctx.fatal(`Volume ${final.name} failed to provision: ${final.lastError ?? 'unknown error'}`);
+    }
+
+    if (final.state === 'available' || final.state === 'in_use') {
+      ctx.success(`Network volume ${final.name} is ready.`);
+    } else if (options.wait) {
+      ctx.warn(`Volume ${final.name} is still ${final.state}. Check with featherless-cloud volume get ${final.id}.`);
+    } else {
+      ctx.success(`Network volume ${final.name} is provisioning. It becomes usable automatically — check with featherless-cloud volume get.`);
+    }
+
+    ctx.output(final, (item: NetworkVolumeDto) => ({ text: `STATE ${item.state}` }));
+  });

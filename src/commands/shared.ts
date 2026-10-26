@@ -5,7 +5,7 @@ import { computeTypeOf, type PriceRate, type CatalogTemplate } from '../types/pr
 import type { NetworkVolumeDto } from '../types/volume';
 import type { InstanceDto } from '../types/instance';
 import type { CloudClient } from '../clients/cloud';
-import type { RegistryCredential } from '../types/instance';
+import type { RegistryCredential, SshKey } from '../types/instance';
 import { loadConfig } from '../config';
 import type { Completer, CompleterContext } from '../completions';
 
@@ -438,11 +438,35 @@ export function resolveCredentialRef(credentials: RegistryCredential[], ref: str
     return match.id;
   }
 
-  throw new CliError(`No registry credential matching "${ref}". Manage credentials in the console.`);
+  throw new CliError(`No registry key matching "${ref}". List them with featherless-cloud registry-keys list.`);
 }
 
 export const registries: Completer = async (word, ctx) =>
   (await (await ctx.cloud()).registryCredentials()).map(credential => credential.name).filter(startsWith(word));
+
+export function resolveSshKeyRef(keys: SshKey[], ref: string): SshKey {
+  const byId = keys.find(key => key.id === ref.toLowerCase());
+
+  if (byId) {
+    return byId;
+  }
+
+  const needle = ref.toLowerCase();
+  const matches = keys.filter(key => key.name.toLowerCase() === needle);
+
+  if (matches.length === 1) {
+    return matches[0]!;
+  }
+
+  if (matches.length > 1) {
+    throw new CliError(`Several SSH keys are named "${ref}". Use the ID from featherless-cloud ssh-keys list.`);
+  }
+
+  throw new CliError(`No SSH key matching "${ref}". List them with featherless-cloud ssh-keys list.`);
+}
+
+export const sshKeys: Completer = async (word, ctx) =>
+  (await (await ctx.cloud()).sshKeys()).map(key => key.name).filter(startsWith(word));
 
 /** Finds a volume by uuid, exact name, or unique substring, in any state. */
 export function findVolume(volumes: NetworkVolumeDto[], ref: string): NetworkVolumeDto {
