@@ -1,6 +1,6 @@
 {
   "name": "@featherlessai/gpu-cloud-cli",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Command-line client for Featherless GPU Cloud",
   "homepage": "https://console.cloud.featherless.ai",
   "license": "UNLICENSED",
