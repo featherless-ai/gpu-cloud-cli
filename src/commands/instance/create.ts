@@ -6,11 +6,15 @@ import { CloudClient, type CreateInstanceBody } from '../../clients/cloud';
 import { CliError } from '../../error';
 import {
   assertInstanceName,
+  computeFlagsGiven,
   cpuCores,
+  findTemplate,
   gpuCounts,
   gpuTypes,
+  parseDisk,
   parsePorts,
   parseRepeatable,
+  parseVolumeFlags,
   profiles,
   randomInstanceName,
   registries,
@@ -18,22 +22,25 @@ import {
   resolveImage,
   resolveVolume,
   selectImage,
+  templateIds,
   templates,
   toEnvironment,
   validateMounts,
   volumeMounts,
 } from '../shared';
+import type { Template } from '../../types/templates';
 
 interface CreateOptions {
   name?: string;
   image?: string;
   template?: string;
+  templateId?: string;
   registry?: string;
   computeType: 'gpu' | 'cpu';
   gpuType?: string;
   gpuCount?: string;
   cpuCores?: string;
-  disk?: string;
+  disk: string;
   volume?: string[];
   command?: string;
   env?: string[];
@@ -42,38 +49,13 @@ interface CreateOptions {
   profile?: string;
 }
 
-function parseDisk(value: string | undefined): number {
-  if (value === undefined) {
-    return 20;
-  }
-
-  const disk = Number(value);
-
-  if (!Number.isInteger(disk) || disk < 20 || disk > 2000) {
-    throw new CliError('Container disk must be between 20 and 2000 GB.');
-  }
-
-  return disk;
-}
-
-function parseVolumeFlags(values: string[] | undefined): Array<{ volume: string; mountPath: string }> {
-  return (values ?? []).map((entry) => {
-    const separator = entry.lastIndexOf(':');
-
-    if (separator < 1 || separator === entry.length - 1) {
-      throw new CliError(`--volume expects NAME:PATH, got "${entry}"`);
-    }
-
-    return { volume: entry.slice(0, separator), mountPath: entry.slice(separator + 1) };
-  });
-}
-
 export const instanceCreateCommand = new CliCommand('create')
   .description('Create an instance')
   .option('--name <name>', 'instance name (random when omitted)')
-  .option('--image <reference>', 'container image to run')
-  .option('--template <name|id>', 'published template to launch', { complete: templates })
-  .option('--registry <name|id>', 'registry credential for a private --image', { complete: registries })
+  .option('--template <name>', 'template to launch: a name, org/<name>, featherless/<name> or an id; other flags override it', { complete: templates })
+  .option('--template-id <id>', 'template to launch, by id', { complete: templateIds })
+  .option('--image <reference>', 'container image to run, or to replace the template\'s')
+  .option('--registry <name|id>', 'registry credential for a private image', { complete: registries })
   .option('--compute-type <type>', 'gpu or cpu', { choices: ['gpu', 'cpu'], defaultValue: 'gpu' })
   .option('--gpu-type <text>', 'GPU model substring, e.g. mi325x', { complete: gpuTypes('instance') })
   .option('--gpu-count <n>', 'GPUs per instance: 1, 2, 4, or 8', { complete: gpuCounts('instance') })
@@ -94,37 +76,46 @@ export const instanceCreateCommand = new CliCommand('create')
     const name = options.name ?? randomInstanceName();
     assertInstanceName(name);
 
-    const [pricing, templates, volumes, credentials] = await ctx.spin('Loading configurator', async () => {
-      const registryNeeded = Boolean(options.image && options.registry);
+    const [template, pricing, volumes, credentials] = await ctx.spin('Loading configurator', async () => Promise.all([
+      findTemplate(client, options),
+      client.pricing(),
+      options.volume?.length ? client.listVolumes() : Promise.resolve([]),
+      options.registry ? client.registryCredentials() : Promise.resolve([]),
+    ]));
 
-      return Promise.all([
-        client.pricing(),
-        options.template ? client.templates() : Promise.resolve([]),
-        options.volume?.length ? client.listVolumes() : Promise.resolve([]),
-        registryNeeded ? client.registryCredentials() : Promise.resolve([]),
-      ]);
-    });
-
+    let chosen: Template | null = template;
     let image;
 
-    if (!options.template && !options.image && ctx.mode === 'interactive') {
-      const catalog = await ctx.spin('Loading templates', () => client.templates());
-      image = await selectImage(catalog, ctx);
+    if (!chosen && !options.image && ctx.mode === 'interactive') {
+      const selection = await selectImage(await ctx.spin('Loading templates', () => client.templates()), ctx);
+      chosen = 'template' in selection ? selection.template : null;
+      image = 'containerImage' in selection ? { containerImage: selection.containerImage } : {};
     } else {
-      image = resolveImage(templates, credentials, {
-        template: options.template,
-        image: options.image,
-        registry: options.registry,
-      });
+      image = resolveImage(credentials, options, Boolean(chosen));
     }
 
-    const compute = await resolveCompute(pricing, {
-      computeType: options.computeType,
-      gpuType: options.gpuType,
-      gpuCount: options.gpuCount,
-      cpuCores: options.cpuCores,
-      interactive: ctx.mode === 'interactive',
-    }, ctx);
+    const body: CreateInstanceBody = {
+      name,
+      ...(chosen ? { templateId: chosen.id } : {}),
+      ...image,
+    };
+
+    // A template's compute and disk stand unless a flag says otherwise.
+    if (!chosen?.computeSku || computeFlagsGiven(cmd, options)) {
+      const compute = await resolveCompute(pricing, {
+        computeType: options.computeType,
+        gpuType: options.gpuType,
+        gpuCount: options.gpuCount,
+        cpuCores: options.cpuCores,
+        interactive: ctx.mode === 'interactive',
+      }, ctx);
+
+      body.computeSku = compute.computeSku;
+    }
+
+    if (!chosen || cmd.getOptionValueSource('disk') === 'cli') {
+      body.ephemeralDiskGiB = parseDisk(options.disk);
+    }
 
     const mounts = parseVolumeFlags(options.volume).map(entry => ({
       networkVolumeId: resolveVolume(volumes, entry.volume),
@@ -142,13 +133,6 @@ export const instanceCreateCommand = new CliCommand('create')
     if (quota && quota.gpuLimit > 0 && quota.gpuCount >= quota.gpuLimit) {
       ctx.warn('Organization GPU limit already reached; the server may reject this.');
     }
-
-    const body: CreateInstanceBody = {
-      name,
-      ...image,
-      computeSku: compute.computeSku,
-      ephemeralDiskGiB: parseDisk(options.disk),
-    };
 
     if (mounts.length) {
       body.networkVolumeMounts = mounts;

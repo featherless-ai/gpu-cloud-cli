@@ -85,7 +85,9 @@ export const instanceGetCommand = new CliCommand('get')
         lines.push(`IMAGE       ${item.image.reference}`);
       }
 
-      if (item.templateVersion) {
+      if (item.template) {
+        lines.push(`TEMPLATE    ${[item.template.name, item.templateVersion?.version].filter(Boolean).join(' ')}`);
+      } else if (item.templateVersion) {
         lines.push(`TEMPLATE    ${item.templateVersion.name} ${item.templateVersion.version}`);
       }
 

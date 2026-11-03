@@ -58,8 +58,8 @@ featherless-cloud instance start train
 featherless-cloud instance delete train
 ```
 
-- **Image:** `--template <name>` for a published template, or `--image <reference>` for your own
-  container (add `--registry <name>` for a private one, see [Private images](#private-images)).
+- **Image:** `--template <name>` for a template (see [Templates](#templates)), or `--image <reference>`
+  for your own container (add `--registry <name>` for a private one, see [Private images](#private-images)).
 - **Compute:** `--gpu-type` and `--gpu-count` (1, 2, 4 or 8), or `--compute-type cpu --cpu-cores <n>`.
 - **Storage:** `--disk <gb>` for the container disk; `--volume <name>:<path>` mounts a network volume.
 - **Settings:** `--env K=V` and `--secret K=V`, both repeatable.
@@ -130,12 +130,37 @@ featherless-cloud runjob cancel nightly
 ```
 
 - Without `--template` or `--image`, `exec` uses the PyTorch environment.
+- With a template that has a start command, the command after `--` is optional.
 - Your local files aren't uploaded: the command and its files must be in the image or on a
   mounted volume.
 - `exec` streams the output and exits with the command's exit code. **Ctrl-C** detaches;
   `--cancel-on-interrupt` cancels instead.
 - `--timeout <seconds>` caps the run time (default 24 hours).
 - `--idempotency-key <key>` makes a retried `exec` reuse the first Run Job.
+
+## Templates
+
+Save the settings you launch with, then launch by name. A template keeps the image, compute,
+disk, volumes, start command, environment, secrets and ports.
+
+```sh
+featherless-cloud templates create trainer --image ghcr.io/acme/trainer:1 --registry ghcr \
+  --gpu-count 1 --disk 100 --volume data:/workspace --env EPOCHS=3 --secret HF_TOKEN=…
+featherless-cloud instance create --template trainer
+featherless-cloud exec --template trainer --gpu-count 8 -- python train.py --epochs 10
+featherless-cloud templates list
+featherless-cloud templates update trainer --visibility organization
+```
+
+- Any flag you pass when launching replaces the template's value; `--env` and `--secret` add to or
+  replace the template's by name.
+- `--template` finds your template first, then one shared in your organization, then an official
+  one. `org/<name>` and `featherless/<name>` pick one explicitly; `--template-id <id>` takes the ID
+  from `templates list`.
+- Templates are private until `--visibility organization`. Every member can then launch one, with
+  its secrets, but only you or an organization admin can change it.
+- `templates create --template <official>` starts from an official template's image.
+- Changing or deleting a template doesn't affect instances or Run Jobs already launched from it.
 
 ## Private images
 
@@ -269,6 +294,8 @@ and volume names, folders inside `vol://` paths, templates, GPU models and profi
 | `runjob cancel`, `delete` | Stop a Run Job, or delete its record |
 | `ssh-keys list`, `add`, `delete` | Manage your SSH public keys |
 | `registry-keys list`, `add`, `update`, `delete` | Manage registry logins for private images |
+| `templates list`, `show` | List templates, or show one's settings |
+| `templates create`, `update`, `delete` | Save, change or delete a template |
 | `volume create`, `get`, `update`, `delete` | Manage network volumes |
 | `volume ls`, `find` | Browse files in a volume |
 | `volume cp`, `mv`, `mkdir`, `rm` | Manage files in a volume |

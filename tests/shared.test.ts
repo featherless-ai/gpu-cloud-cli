@@ -13,14 +13,17 @@ import {
   resolveImage,
   resolveInstanceId,
   resolveSshKeyRef,
+  resolveTemplateRef,
   resolveVolume,
+  templateReference,
   toEnvironment,
   validateMounts,
 } from '../src/commands/shared';
 import { newContent } from '../src/commands/instance/logs';
 import { CliContext } from '../src/context';
 import { CliError } from '../src/error';
-import type { PriceRate, CatalogTemplate } from '../src/types/pricing';
+import type { PriceRate } from '../src/types/pricing';
+import type { Template } from '../src/types/templates';
 import type { NetworkVolumeDto } from '../src/types/volume';
 import type { RegistryCredential, SshKey } from '../src/types/instance';
 import { parsePublicKey } from '../src/commands/ssh-keys/add';
@@ -79,22 +82,40 @@ const PRICES: PriceRate[] = [
   cpuRate('cpu.large', 16),
 ];
 
-const TEMPLATES: CatalogTemplate[] = [{
-  id: 't1',
-  name: 'PyTorch',
-  description: '',
-  imageRepository: null,
-  enabled: true,
-  computeTypes: ['gpu'],
-  version: {
-    id: '11111111-1111-4111-8111-111111111111',
-    version: '2.4.1',
-    tag: 'latest',
-    state: 'published',
-    image: 'ghcr.io/featherless/pytorch:2.4.1',
-    startupCommand: '',
-  },
-}];
+function template(overrides: Partial<Template> & Pick<Template, 'id' | 'slug' | 'name' | 'visibility'>): Template {
+  return {
+    description: '',
+    imageRepository: null,
+    enabled: true,
+    computeTypes: ['gpu'],
+    version: {
+      id: overrides.id, version: '', tag: null, state: 'published', image: 'ghcr.io/acme/app:1', startupCommand: '',
+    },
+    shortId: `${overrides.slug.replace(/[^a-z]/g, '').padEnd(10, 'b').slice(0, 10)}`,
+    official: overrides.visibility === 'public',
+    owner: overrides.visibility === 'public' ? null : { id: 'u1', name: 'Ada' },
+    canEdit: overrides.visibility !== 'public',
+    image: 'ghcr.io/acme/app:1',
+    imageSource: 'custom',
+    registryCredentialId: null,
+    computeSku: null,
+    ephemeralDiskGiB: null,
+    networkVolumeMounts: [],
+    command: [],
+    environment: [],
+    secretNames: [],
+    publicPorts: [],
+    autoTmux: null,
+    ...overrides,
+  };
+}
+
+const PYTORCH = template({ id: '11111111-1111-4111-8111-111111111111', slug: 'rocm-pytorch', name: 'PyTorch (ROCm)', visibility: 'public' });
+const MINE = template({ id: '33333333-3333-4333-8333-333333333331', slug: 'trainer', name: 'trainer', visibility: 'private' });
+const SHARED = template({ id: '33333333-3333-4333-8333-333333333332', slug: 'trainer', name: 'trainer', visibility: 'organization' });
+const SHARED_SERVE = template({ id: '33333333-3333-4333-8333-333333333333', slug: 'serve', name: 'serve', visibility: 'organization' });
+const MY_PYTORCH = template({ id: '33333333-3333-4333-8333-333333333334', slug: 'rocm-pytorch', name: 'rocm-pytorch', visibility: 'private' });
+const TEMPLATES = [PYTORCH, MINE, SHARED, SHARED_SERVE];
 
 const CREDENTIALS: RegistryCredential[] = [{
   id: '22222222-2222-4222-8222-222222222222',
@@ -281,32 +302,61 @@ describe('resolveCompute', () => {
 });
 
 describe('resolveImage', () => {
-  it('resolves a template by name case-insensitively', () => {
-    expect(resolveImage(TEMPLATES, [], { template: 'pytorch' }))
-      .toEqual({ templateVersionId: TEMPLATES[0]?.version.id });
+  it('replaces a template\'s image or registry key', () => {
+    expect(resolveImage(CREDENTIALS, { image: 'nginx:1' }, true)).toEqual({ containerImage: 'nginx:1' });
+    expect(resolveImage(CREDENTIALS, { registry: 'Private Hub' }, true)).toEqual({ registryCredentialId: CREDENTIALS[0]?.id });
   });
 
-  it('rejects template plus image', () => {
-    expect(() => resolveImage(TEMPLATES, [], { template: 'pytorch', image: 'nginx' }))
-      .toThrow('Choose either --template or --image, not both.');
-  });
-
-  it('rejects registry without image', () => {
-    expect(() => resolveImage(TEMPLATES, CREDENTIALS, { template: 'pytorch', registry: 'Private Hub' }))
-      .toThrow('--registry applies only with --image.');
+  it('rejects registry without an image or a template', () => {
+    expect(() => resolveImage(CREDENTIALS, { registry: 'Private Hub' }, false))
+      .toThrow('--registry applies only with --image or a template.');
   });
 
   it('resolves a private image with a named credential', () => {
-    expect(resolveImage([], CREDENTIALS, { image: 'registry.example.com/x:1', registry: 'private hub' }))
+    expect(resolveImage(CREDENTIALS, { image: 'registry.example.com/x:1', registry: 'private hub' }, false))
       .toEqual({ containerImage: 'registry.example.com/x:1', registryCredentialId: CREDENTIALS[0]?.id });
   });
 
   it('rejects too-short image references', () => {
-    expect(() => resolveImage([], [], { image: 'x:' })).toThrow('Enter a container image.');
+    expect(() => resolveImage([], { image: 'x:' }, false)).toThrow('Enter a container image.');
   });
 
   it('requires an explicit choice in plain mode', () => {
-    expect(() => resolveImage(TEMPLATES, [], {})).toThrow('Pass --image or --template.');
+    expect(() => resolveImage([], {}, false)).toThrow('Pass --image, --template or --template-id.');
+  });
+});
+
+describe('resolveTemplateRef', () => {
+  it('finds your template first, then your organization\'s, then an official one', () => {
+    expect(resolveTemplateRef(TEMPLATES, 'trainer')).toBe(MINE);
+    expect(resolveTemplateRef(TEMPLATES, 'serve')).toBe(SHARED_SERVE);
+    expect(resolveTemplateRef(TEMPLATES, 'rocm-pytorch')).toBe(PYTORCH);
+    expect(resolveTemplateRef([...TEMPLATES, MY_PYTORCH], 'rocm-pytorch')).toBe(MY_PYTORCH);
+  });
+
+  it('reaches a shadowed template through its namespace', () => {
+    expect(resolveTemplateRef(TEMPLATES, 'org/trainer')).toBe(SHARED);
+    expect(resolveTemplateRef([...TEMPLATES, MY_PYTORCH], 'featherless/rocm-pytorch')).toBe(PYTORCH);
+    expect(() => resolveTemplateRef(TEMPLATES, 'org/rocm-pytorch')).toThrow('No template matching "org/rocm-pytorch"');
+  });
+
+  it('finds a template by id or short id', () => {
+    expect(resolveTemplateRef(TEMPLATES, SHARED.id.toUpperCase())).toBe(SHARED);
+    expect(resolveTemplateRef(TEMPLATES, SHARED_SERVE.shortId)).toBe(SHARED_SERVE);
+  });
+
+  it('still matches part of an official template\'s display name', () => {
+    expect(resolveTemplateRef(TEMPLATES, 'PyTorch')).toBe(PYTORCH);
+
+    expect(() => resolveTemplateRef([...TEMPLATES, template({ id: 't9', slug: 'rocm-pytorch-nightly', name: 'PyTorch nightly', visibility: 'public' })], 'pytorch'))
+      .toThrow('Multiple templates match "pytorch"');
+  });
+});
+
+describe('templateReference', () => {
+  it('names a template bare unless a closer one has its name', () => {
+    expect(TEMPLATES.map(item => templateReference(item, TEMPLATES))).toEqual(['rocm-pytorch', 'trainer', 'org/trainer', 'serve']);
+    expect(templateReference(PYTORCH, [...TEMPLATES, MY_PYTORCH])).toBe('featherless/rocm-pytorch');
   });
 });
 
