@@ -115,6 +115,8 @@ export interface CreateInstanceBody {
   name: string;
   /** Fills in whatever the rest of the body leaves out. */
   templateId?: string;
+  /** An official template's version; its current one when left out. */
+  templateVersion?: string;
   containerImage?: string;
   registryCredentialId?: string | null;
   computeSku?: string;
@@ -165,6 +167,8 @@ export interface CreateRunJobBody {
   name: string;
   /** Fills in whatever the rest of the body leaves out, its command included. */
   templateId?: string;
+  /** An official template's version; its current one when left out. */
+  templateVersion?: string;
   containerImage?: string;
   registryCredentialId?: string | null;
   computeSku?: string;
@@ -186,6 +190,8 @@ export interface TemplateBody {
   visibility?: TemplateVisibility;
   /** An official template to start from. */
   baseTemplateId?: string;
+  /** Which of its versions; the current one when left out. */
+  baseTemplateVersion?: string;
   containerImage?: string;
   registryCredentialId?: string | null;
   computeSku?: string | null;

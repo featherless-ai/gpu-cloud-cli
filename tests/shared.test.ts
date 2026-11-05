@@ -18,6 +18,8 @@ import {
   templateReference,
   toEnvironment,
   validateMounts,
+  checkTemplateVersion,
+  splitTemplateVersion,
 } from '../src/commands/shared';
 import { newContent } from '../src/commands/instance/logs';
 import { CliContext } from '../src/context';
@@ -107,6 +109,7 @@ function template(overrides: Partial<Template> & Pick<Template, 'id' | 'slug' | 
     publicPorts: [],
     autoTmux: null,
     tags: [],
+    versions: [],
     ...overrides,
   };
 }
@@ -324,6 +327,28 @@ describe('resolveImage', () => {
 
   it('requires an explicit choice in plain mode', () => {
     expect(() => resolveImage([], {}, false)).toThrow('Pass --image, --template or --template-id.');
+  });
+});
+
+describe('template versions', () => {
+  const versioned = template({
+    id: '11111111-1111-4111-8111-111111111119',
+    slug: 'rocm-pytorch',
+    name: 'PyTorch (ROCm)',
+    visibility: 'public',
+    versions: [{ version: '2.12.0', image: 'r:2.12' }, { version: '2.11.0', image: 'r:2.11' }],
+  });
+
+  it('reads a version after the colon in a template reference', () => {
+    expect(splitTemplateVersion('featherless/rocm-pytorch:2.11.0')).toEqual({ ref: 'featherless/rocm-pytorch', version: '2.11.0' });
+    expect(splitTemplateVersion('trainer')).toEqual({ ref: 'trainer' });
+  });
+
+  it('accepts only versions the official template lists', () => {
+    expect(checkTemplateVersion(versioned, '2.11.0')).toBe('2.11.0');
+    expect(checkTemplateVersion(versioned, undefined)).toBeUndefined();
+    expect(() => checkTemplateVersion(versioned, '9.9.9')).toThrow('PyTorch (ROCm) has no version 9.9.9. Versions: 2.12.0, 2.11.0.');
+    expect(() => checkTemplateVersion(MINE, '1')).toThrow('Only official templates have versions');
   });
 });
 

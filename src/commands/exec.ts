@@ -37,6 +37,7 @@ interface ExecOptions {
   image?: string;
   template?: string;
   templateId?: string;
+  templateVersion?: string;
   registry?: string;
   gpuType?: string;
   gpuCount?: string;
@@ -202,6 +203,7 @@ export const execCommand = new CliCommand('exec')
   .option('--name <name>', 'Run Job name (random when omitted)')
   .option('--template <name>', 'template: a name, org/<name>, featherless/<name> or an id; defaults to the PyTorch environment', { complete: templates })
   .option('--template-id <id>', 'template, by id', { complete: templateIds })
+  .option('--template-version <version>', 'an official template\'s version, e.g. 2.11.0 (or --template name:version); its current one by default')
   .option('--image <reference>', 'container image to run, or to replace the template\'s')
   .option('--registry <name|id>', 'registry credential for a private image', { complete: registries })
   .option('--gpu-type <text>', 'GPU model substring, e.g. mi325x', { complete: gpuTypes('run-job') })
@@ -236,12 +238,14 @@ export const execCommand = new CliCommand('exec')
     const name = options.name ?? randomInstanceName();
     assertInstanceName(name);
 
-    const [template, pricing, volumes, credentials] = await ctx.spin('Loading execution options', () => Promise.all([
+    const [found, pricing, volumes, credentials] = await ctx.spin('Loading execution options', () => Promise.all([
       findTemplate(client, options),
       client.pricing('run-job'),
       options.volume?.length ? client.listVolumes() : Promise.resolve([]),
       options.registry ? client.registryCredentials() : Promise.resolve([]),
     ]));
+
+    const template = found?.template ?? null;
 
     if (command.length === 0 && !template?.command.length) {
       throw new CliError('Provide the command after --.');
@@ -277,6 +281,7 @@ export const execCommand = new CliCommand('exec')
     const body: CreateRunJobBody = {
       name,
       ...(template ? { templateId: template.id } : {}),
+      ...(found?.version ? { templateVersion: found.version } : {}),
       ...image,
       ...compute,
       ...(command.length ? { command } : {}),

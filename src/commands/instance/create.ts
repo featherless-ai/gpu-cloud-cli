@@ -35,6 +35,7 @@ interface CreateOptions {
   image?: string;
   template?: string;
   templateId?: string;
+  templateVersion?: string;
   registry?: string;
   computeType: 'gpu' | 'cpu';
   gpuType?: string;
@@ -54,6 +55,7 @@ export const instanceCreateCommand = new CliCommand('create')
   .option('--name <name>', 'instance name (random when omitted)')
   .option('--template <name>', 'template to launch: a name, org/<name>, featherless/<name> or an id; other flags override it', { complete: templates })
   .option('--template-id <id>', 'template to launch, by id', { complete: templateIds })
+  .option('--template-version <version>', 'an official template\'s version, e.g. 2.11.0 (or --template name:version); its current one by default')
   .option('--image <reference>', 'container image to run, or to replace the template\'s')
   .option('--registry <name|id>', 'registry credential for a private image', { complete: registries })
   .option('--compute-type <type>', 'gpu or cpu', { choices: ['gpu', 'cpu'], defaultValue: 'gpu' })
@@ -76,14 +78,14 @@ export const instanceCreateCommand = new CliCommand('create')
     const name = options.name ?? randomInstanceName();
     assertInstanceName(name);
 
-    const [template, pricing, volumes, credentials] = await ctx.spin('Loading configurator', async () => Promise.all([
+    const [found, pricing, volumes, credentials] = await ctx.spin('Loading configurator', async () => Promise.all([
       findTemplate(client, options),
       client.pricing(),
       options.volume?.length ? client.listVolumes() : Promise.resolve([]),
       options.registry ? client.registryCredentials() : Promise.resolve([]),
     ]));
 
-    let chosen: Template | null = template;
+    let chosen: Template | null = found?.template ?? null;
     let image;
 
     if (!chosen && !options.image && ctx.mode === 'interactive') {
@@ -97,6 +99,7 @@ export const instanceCreateCommand = new CliCommand('create')
     const body: CreateInstanceBody = {
       name,
       ...(chosen ? { templateId: chosen.id } : {}),
+      ...(found?.version ? { templateVersion: found.version } : {}),
       ...image,
     };
 

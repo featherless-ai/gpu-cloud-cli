@@ -161,6 +161,8 @@ featherless-cloud templates update trainer --visibility organization
 - Templates are private until `--visibility organization`. Every member can then launch one, with
   its secrets, but only you or an organization admin can change it.
 - `templates create --template <official>` starts from an official template's image.
+- Official templates can offer several versions; `--template featherless/rocm-pytorch:2.11.0` (or
+  `--template-version 2.11.0`) launches an older one, and `templates show` lists them.
 - `--tag` labels a template; `templates list` shows the tags. Repeating `--tag` on `update`
   replaces the saved tags.
 - Changing or deleting a template doesn't affect instances or Run Jobs already launched from it.

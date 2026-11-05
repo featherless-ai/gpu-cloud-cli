@@ -16,8 +16,10 @@ import {
   registries,
   resolveCompute,
   resolveCredentialRef,
+  checkTemplateVersion,
   resolveTemplateRef,
   resolveVolume,
+  splitTemplateVersion,
   templates,
   toEnvironment,
   validateMounts,
@@ -50,7 +52,7 @@ export function withTemplateFlags(command: CliCommand): CliCommand {
   return command
     .option('--description <text>', 'what the template is for')
     .option('--visibility <visibility>', 'private, or organization to let every member launch it with its secrets', { choices: [...TEMPLATE_VISIBILITIES] })
-    .option('--template <name>', 'start from an official template\'s image, command and environment', { complete: templates })
+    .option('--template <name>', 'start from an official template\'s image, command and environment; name:version for an older version', { complete: templates })
     .option('--image <reference>', 'container image to run')
     .option('--registry <name|id>', 'registry credential for a private --image', { complete: registries })
     .option('--compute-type <type>', 'gpu or cpu', { choices: ['gpu', 'cpu'], defaultValue: 'gpu' })
@@ -83,8 +85,16 @@ export async function templateBody(client: CloudClient, flags: TemplateFlags, cm
   }
 
   if (flags.template) {
+    const { ref, version } = splitTemplateVersion(flags.template);
     const official = (await client.templates()).filter(template => template.official);
-    body.baseTemplateId = resolveTemplateRef(official, flags.template).id;
+    const base = resolveTemplateRef(official, ref);
+    body.baseTemplateId = base.id;
+
+    const checked = checkTemplateVersion(base, version);
+
+    if (checked) {
+      body.baseTemplateVersion = checked;
+    }
   }
 
   if (flags.image) {

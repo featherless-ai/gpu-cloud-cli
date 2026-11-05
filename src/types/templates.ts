@@ -25,6 +25,8 @@ export const templateSchema = catalogTemplateSchema.extend({
   publicPorts: z.array(z.number().int()),
   autoTmux: z.enum(['off', 'ssh-only']).nullable(),
   tags: z.array(z.string()).default([]),
+  /** An official template's versions, current first. */
+  versions: z.array(z.object({ version: z.string(), image: z.string() })).default([]),
 });
 
 export type Template = z.infer<typeof templateSchema>;

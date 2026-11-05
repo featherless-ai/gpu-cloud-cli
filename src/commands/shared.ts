@@ -451,20 +451,70 @@ export function resolveTemplateRef(templates: Template[], ref: string): Template
 }
 
 /** The template --template or --template-id names, if either was given. */
-export async function findTemplate(client: CloudClient, opts: { template?: string; templateId?: string }): Promise<Template | null> {
+/** `featherless/rocm-pytorch:2.11.0` names an official template's version; template names never hold a colon. */
+export function splitTemplateVersion(ref: string): { ref: string; version?: string } {
+  const separator = ref.indexOf(':');
+  return separator > 0 ? { ref: ref.slice(0, separator), version: ref.slice(separator + 1) } : { ref };
+}
+
+/** A version must be one the official template lists. */
+export function checkTemplateVersion(template: Template, version: string | undefined): string | undefined {
+  if (!version) {
+    return undefined;
+  }
+
+  if (!template.official) {
+    throw new CliError(`Only official templates have versions, and ${template.name} is not one.`);
+  }
+
+  if (!template.versions.some(entry => entry.version === version)) {
+    throw new CliError(`${template.name} has no version ${version}. Versions: ${template.versions.map(entry => entry.version).join(', ')}.`);
+  }
+
+  return version;
+}
+
+export interface TemplateChoice {
+  template: Template;
+  /** An official version other than the current one. */
+  version?: string;
+}
+
+export async function findTemplate(
+  client: CloudClient,
+  opts: { template?: string; templateId?: string; templateVersion?: string },
+): Promise<TemplateChoice | null> {
   if (opts.template && opts.templateId) {
     throw new CliError('Choose either --template or --template-id.');
   }
 
+  let template: Template | null = null;
+  let version = opts.templateVersion;
+
   if (opts.templateId) {
-    return client.template(opts.templateId);
+    template = await client.template(opts.templateId);
   }
 
   if (opts.template) {
-    return resolveTemplateRef(await client.templates(), opts.template);
+    const split = splitTemplateVersion(opts.template);
+
+    if (split.version && opts.templateVersion) {
+      throw new CliError('Give the version once: --template name:version or --template-version.');
+    }
+
+    version = split.version ?? version;
+    template = resolveTemplateRef(await client.templates(), split.ref);
   }
 
-  return null;
+  if (!template) {
+    if (opts.templateVersion) {
+      throw new CliError('--template-version needs --template or --template-id.');
+    }
+
+    return null;
+  }
+
+  return { template, version: checkTemplateVersion(template, version) };
 }
 
 export const templates: Completer = async (word, ctx) => {
