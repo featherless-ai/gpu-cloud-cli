@@ -25,6 +25,7 @@ export const templatesShowCommand = new CliCommand('show')
         `VISIBILITY  ${item.visibility}`,
         `OWNER       ${item.owner?.name ?? 'Featherless'}`,
         `TAGS        ${item.tags.join(', ') || '-'}`,
+        `GPUS        ${item.gpuVendors.map(vendor => (vendor === 'amd' ? 'AMD' : 'NVIDIA')).join(', ')}`,
         ...(item.versions.length
           ? [`VERSIONS    ${item.versions.map((entry, index) => index === 0 ? `${entry.version} (current)` : entry.version).join(', ')}`]
           : []),

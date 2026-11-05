@@ -25,6 +25,8 @@ export const templateSchema = catalogTemplateSchema.extend({
   publicPorts: z.array(z.number().int()),
   autoTmux: z.enum(['off', 'ssh-only']).nullable(),
   tags: z.array(z.string()).default([]),
+  /** The GPUs its image runs on. */
+  gpuVendors: z.array(z.enum(['amd', 'nvidia'])).default(['amd', 'nvidia']),
   /** An official template's versions, current first. */
   versions: z.array(z.object({ version: z.string(), image: z.string() })).default([]),
 });

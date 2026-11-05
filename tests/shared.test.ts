@@ -110,6 +110,7 @@ function template(overrides: Partial<Template> & Pick<Template, 'id' | 'slug' | 
     autoTmux: null,
     tags: [],
     versions: [],
+    gpuVendors: ['amd', 'nvidia'],
     ...overrides,
   };
 }
