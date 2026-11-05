@@ -196,6 +196,8 @@ export interface TemplateBody {
   /** Replaces the saved secrets. */
   secrets?: Array<{ name: string; value: string }>;
   publicPorts?: number[];
+  /** Replaces the saved tags. */
+  tags?: string[];
 }
 
 export interface TerminalSession {

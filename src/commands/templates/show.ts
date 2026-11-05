@@ -24,6 +24,7 @@ export const templatesShowCommand = new CliCommand('show')
         `ID          ${item.shortId}`,
         `VISIBILITY  ${item.visibility}`,
         `OWNER       ${item.owner?.name ?? 'Featherless'}`,
+        `TAGS        ${item.tags.join(', ') || '-'}`,
         `IMAGE       ${item.image}`,
         `COMPUTE     ${pricing.find(rate => rate.sku === item.computeSku)?.displayName ?? '-'}`,
         `DISK        ${item.ephemeralDiskGiB ? `${item.ephemeralDiskGiB} GB` : '-'}`,

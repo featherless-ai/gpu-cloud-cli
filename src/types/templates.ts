@@ -24,6 +24,7 @@ export const templateSchema = catalogTemplateSchema.extend({
   secretNames: z.array(z.string()),
   publicPorts: z.array(z.number().int()),
   autoTmux: z.enum(['off', 'ssh-only']).nullable(),
+  tags: z.array(z.string()).default([]),
 });
 
 export type Template = z.infer<typeof templateSchema>;

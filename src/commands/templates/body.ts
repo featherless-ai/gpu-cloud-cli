@@ -40,6 +40,7 @@ export interface TemplateFlags {
   env: string[];
   secret: string[];
   port: string[];
+  tag: string[];
 }
 
 const repeat = (value: string, previous: string[]) => [...previous, value];
@@ -61,7 +62,8 @@ export function withTemplateFlags(command: CliCommand): CliCommand {
     .option('--command <string>', 'start command (whitespace-split, no shell quoting)')
     .option('--env <K=V>', 'environment variable, repeatable', repeat, [])
     .option('--secret <K=V>', 'secret variable, repeatable; replaces the saved secrets', repeat, [])
-    .option('--port <port>', 'serve this port at a public HTTPS address, repeatable', repeat, []);
+    .option('--port <port>', 'serve this port at a public HTTPS address, repeatable', repeat, [])
+    .option('--tag <tag>', 'label such as AMD or "CUDA 12.8", repeatable; replaces the saved tags', repeat, []);
 }
 
 /** Only the flags that were typed, so an update changes nothing else. */
@@ -134,6 +136,10 @@ export async function templateBody(client: CloudClient, flags: TemplateFlags, cm
 
   if (flags.port.length) {
     body.publicPorts = parsePorts(flags.port);
+  }
+
+  if (flags.tag.length) {
+    body.tags = flags.tag;
   }
 
   return body;

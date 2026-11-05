@@ -126,8 +126,8 @@ it('saves, changes and deletes templates by id', async () => {
   const client = new CloudClient('https://api.example.test', 'test-key');
 
   await client.createTemplate({ name: 'trainer', containerImage: 'ghcr.io/acme/trainer:1' });
-  await client.template('k3m9x2bq7t');
-  await client.updateTemplate(saved.id, { visibility: 'organization' });
+  expect((await client.template('k3m9x2bq7t')).tags).toEqual([]);
+  await client.updateTemplate(saved.id, { visibility: 'organization', tags: ['AMD', 'ROCm 7.14'] });
   await client.deleteTemplate(saved.id);
 
   expect(fetchMock.mock.calls.map(call => [(call[1] as RequestInit).method, call[0]])).toEqual([
@@ -137,5 +137,5 @@ it('saves, changes and deletes templates by id', async () => {
     ['DELETE', `https://api.example.test/templates/${saved.id}`],
   ]);
 
-  expect(JSON.parse((fetchMock.mock.calls[2]![1] as RequestInit).body as string)).toEqual({ visibility: 'organization' });
+  expect(JSON.parse((fetchMock.mock.calls[2]![1] as RequestInit).body as string)).toEqual({ visibility: 'organization', tags: ['AMD', 'ROCm 7.14'] });
 });

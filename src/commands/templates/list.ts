@@ -19,11 +19,12 @@ export const templatesListCommand = new CliCommand('list')
 
     ctx.output(templates, (list: Template[]) => ({
       table: {
-        header: ['NAME', 'VISIBILITY', 'OWNER', 'IMAGE', 'COMPUTE', 'ID'],
+        header: ['NAME', 'VISIBILITY', 'OWNER', 'TAGS', 'IMAGE', 'COMPUTE', 'ID'],
         rows: list.map(template => [
           templateReference(template, list),
           template.visibility,
           template.owner?.name ?? 'Featherless',
+          template.tags.join(', ') || '-',
           template.image,
           computeName(template.computeSku),
           template.shortId,

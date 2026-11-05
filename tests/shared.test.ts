@@ -106,6 +106,7 @@ function template(overrides: Partial<Template> & Pick<Template, 'id' | 'slug' | 
     secretNames: [],
     publicPorts: [],
     autoTmux: null,
+    tags: [],
     ...overrides,
   };
 }

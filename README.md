@@ -145,7 +145,8 @@ disk, volumes, start command, environment, secrets and ports.
 
 ```sh
 featherless-cloud templates create trainer --image ghcr.io/acme/trainer:1 --registry ghcr \
-  --gpu-count 1 --disk 100 --volume data:/workspace --env EPOCHS=3 --secret HF_TOKEN=…
+  --gpu-count 1 --disk 100 --volume data:/workspace --env EPOCHS=3 --secret HF_TOKEN=… \
+  --tag AMD --tag "ROCm 7.14"
 featherless-cloud instance create --template trainer
 featherless-cloud exec --template trainer --gpu-count 8 -- python train.py --epochs 10
 featherless-cloud templates list
@@ -160,6 +161,8 @@ featherless-cloud templates update trainer --visibility organization
 - Templates are private until `--visibility organization`. Every member can then launch one, with
   its secrets, but only you or an organization admin can change it.
 - `templates create --template <official>` starts from an official template's image.
+- `--tag` labels a template; `templates list` shows the tags. Repeating `--tag` on `update`
+  replaces the saved tags.
 - Changing or deleting a template doesn't affect instances or Run Jobs already launched from it.
 
 ## Private images
