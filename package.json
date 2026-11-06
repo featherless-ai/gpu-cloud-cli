@@ -1,58 +1,8 @@
 {
   "name": "@featherlessai/gpu-cloud-cli",
-  "version": "0.1.4",
+  "version": "0.2.0",
   "description": "Command-line client for Featherless GPU Cloud",
   "homepage": "https://console.cloud.featherless.ai",
   "license": "UNLICENSED",
-  "type": "module",
-  "packageManager": "pnpm@10.4.1",
-  "bin": {
-    "featherless-cloud": "dist/index.js"
-  },
-  "files": [
-    "dist"
-  ],
-  "engines": {
-    "node": ">=20"
-  },
-  "keywords": [
-    "featherless",
-    "gpu",
-    "cloud",
-    "cli"
-  ],
-  "publishConfig": {
-    "access": "public"
-  },
-  "scripts": {
-    "dev": "tsx src/index.ts",
-    "build": "tsup",
-    "prepack": "pnpm build",
-    "prepare": "command -v git >/dev/null && git config core.hooksPath .githooks || true",
-    "lint": "eslint \"src/**/*.ts\" \"tests/**/*.ts\"",
-    "typecheck": "tsc -p tsconfig.json && tsc -p tsconfig.tests.json",
-    "test": "vitest run --passWithNoTests"
-  },
-  "dependencies": {
-    "@clack/prompts": "^1.2.0",
-    "commander": "^14.0.3",
-    "yaml": "^2.8.2",
-    "zod": "^4.4.3"
-  },
-  "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "@types/node": "^22.0.0",
-    "@vitest/coverage-v8": "^4.1.10",
-    "eslint": "^10.8.0",
-    "tsup": "^8.5.0",
-    "tsx": "^4.20.0",
-    "typescript": "^5.7.0",
-    "typescript-eslint": "^8.66.0",
-    "vitest": "^4.1.10"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild"
-    ]
-  }
+  "private": true
 }

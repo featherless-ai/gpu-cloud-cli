@@ -5,18 +5,20 @@
 
 ## Install
 
-Requires Node.js 20 or newer.
-
 ```sh
 npm install --global @featherlessai/gpu-cloud-cli
-featherless-cloud --help
 ```
 
-To try it without installing:
+Without Node.js, on macOS or Linux:
 
 ```sh
-npx @featherlessai/gpu-cloud-cli pricing list
+curl -fsSL https://console.cloud.featherless.ai/install.sh | sh
 ```
+
+It installs to `~/.local/bin`; set `FEATHERLESS_CLOUD_INSTALL_DIR` to choose another folder.
+`featherless-cloud upgrade` updates either install.
+
+Every instance already has `featherless-cloud`, signed in to your account.
 
 ## Quick start
 
@@ -45,6 +47,10 @@ browser. Create a key there and paste it into the terminal.
 
 Keys are stored in `~/.config/featherless-cloud.yaml` (`%APPDATA%\featherless-cloud.yaml` on
 Windows), readable only by you.
+
+Inside an instance there's nothing to do: the CLI signs in with a key the instance holds while it
+runs, which can manage instances and volumes and read your account. `login` inside the instance
+switches to your own key.
 
 ## Instances
 
