@@ -310,7 +310,7 @@ func TestLanesContinuesTheLanesAnEarlierRunLeftUnfinished(t *testing.T) {
 		t.Fatal("the first run succeeded, want it to fail")
 	}
 
-	env.fake.FailPatches = 0
+	env.fake.Update(func() { env.fake.FailPatches = 0 })
 
 	if err := env.client.Upload(env.ctx, local, "weights.bin", UploadOptions{Mode: ModeCreate}); err != nil {
 		t.Fatal(err)

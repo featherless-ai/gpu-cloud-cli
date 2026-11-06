@@ -129,6 +129,14 @@ func Start(t testing.TB) *Server {
 	return fake
 }
 
+// Update changes the fake while requests may still be running, such as those
+// of lanes a client gave up on.
+func (s *Server) Update(change func()) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	change()
+}
+
 // CreateFileSession issues a token for ten minutes, counting sessions.
 func (s *Server) CreateFileSession(ctx context.Context, volumeID string) (api.FileSession, error) {
 	s.mu.Lock()
