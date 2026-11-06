@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-const unexpectedResponse = "Unexpected response from the Featherless API."
+const wantUnexpected = "Unexpected response from the Featherless API."
 
 const instanceJSON = `{
 	"futureField": true,
@@ -88,8 +88,8 @@ func TestRejectsAResponseOutsideTheSchema(t *testing.T) {
 
 		_, err = parse[Instance](data)
 
-		if err == nil || err.Error() != unexpectedResponse {
-			t.Errorf("%s: error = %v, want %q", c.name, err, unexpectedResponse)
+		if err == nil || err.Error() != wantUnexpected {
+			t.Errorf("%s: error = %v, want %q", c.name, err, wantUnexpected)
 		}
 	}
 }
@@ -108,14 +108,14 @@ func TestRejectsMalformedIDsAndURLs(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := parse[RunJob](data); err == nil || err.Error() != unexpectedResponse {
-		t.Errorf("job id: error = %v, want %q", err, unexpectedResponse)
+	if _, err := parse[RunJob](data); err == nil || err.Error() != wantUnexpected {
+		t.Errorf("job id: error = %v, want %q", err, wantUnexpected)
 	}
 
 	session := `{"token":"t","expiresAt":"2026-01-01T00:00:00Z","baseUrl":"not a url"}`
 
-	if _, err := parse[FileSession]([]byte(session)); err == nil || err.Error() != unexpectedResponse {
-		t.Errorf("file session: error = %v, want %q", err, unexpectedResponse)
+	if _, err := parse[FileSession]([]byte(session)); err == nil || err.Error() != wantUnexpected {
+		t.Errorf("file session: error = %v, want %q", err, wantUnexpected)
 	}
 }
 
@@ -124,7 +124,7 @@ func TestReportsAnUnexpectedResponseFromAnEndpoint(t *testing.T) {
 
 	_, err := NewClient(server.URL, "test-key").GetInstance(context.Background(), "i1")
 
-	assertMessage(t, err, unexpectedResponse)
+	assertMessage(t, err, wantUnexpected)
 }
 
 func TestFillsTemplateDefaults(t *testing.T) {

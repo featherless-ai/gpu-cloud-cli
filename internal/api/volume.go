@@ -12,6 +12,10 @@ const (
 	VolumeInUse        VolumeState = "in_use"
 )
 
+var _ = registerEnum(
+	VolumeProvisioning, VolumeAvailable, VolumeResizing, VolumeError, VolumeDeleting, VolumeDeleted, VolumeInUse,
+)
+
 type NetworkVolume struct {
 	ID          string             `json:"id"`
 	Name        string             `json:"name"`

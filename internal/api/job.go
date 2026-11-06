@@ -16,12 +16,19 @@ const (
 	JobDeleting    RunJobState = "deleting"
 )
 
+var _ = registerEnum(
+	JobQueued, JobStarting, JobRunning, JobRetrying, JobCancelling, JobSucceeded,
+	JobFailed, JobCancelled, JobTimedOut, JobInterrupted, JobDeleting,
+)
+
 type AdmissionState string
 
 const (
 	AdmissionWaiting  AdmissionState = "waiting"
 	AdmissionAdmitted AdmissionState = "admitted"
 )
+
+var _ = registerEnum(AdmissionWaiting, AdmissionAdmitted)
 
 type RunJobAttempt struct {
 	Number         int         `json:"number"`
@@ -103,6 +110,8 @@ const (
 	LogHistoryAvailable LogHistoryStatus = "available"
 	LogHistoryNoData    LogHistoryStatus = "no_data"
 )
+
+var _ = registerEnum(LogHistoryAvailable, LogHistoryNoData)
 
 // RunJobLogHistory is one stored run's output.
 type RunJobLogHistory struct {

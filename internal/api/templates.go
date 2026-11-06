@@ -8,6 +8,8 @@ const (
 	VisibilityPublic       TemplateVisibility = "public"
 )
 
+var _ = registerEnum(VisibilityPrivate, VisibilityOrganization, VisibilityPublic)
+
 // TemplateVisibilities are what an owner may set; official templates are public.
 var TemplateVisibilities = []string{string(VisibilityPrivate), string(VisibilityOrganization)}
 
@@ -18,12 +20,16 @@ const (
 	AutoTmuxSSHOnly AutoTmux = "ssh-only"
 )
 
+var _ = registerEnum(AutoTmuxOff, AutoTmuxSSHOnly)
+
 type GPUVendor string
 
 const (
 	VendorAMD    GPUVendor = "amd"
 	VendorNVIDIA GPUVendor = "nvidia"
 )
+
+var _ = registerEnum(VendorAMD, VendorNVIDIA)
 
 // Template is a GET /templates item: an official template, your own, or one
 // shared in your organization.
