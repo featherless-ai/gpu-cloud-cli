@@ -107,6 +107,8 @@ func (a *attachment) status(message string) {
 func (a *attachment) follow(initial api.RunJob) (api.RunJob, bool, error) {
 	signals := make(chan os.Signal, 1)
 	finished := make(chan struct{})
+	release := shared.TakeSignals()
+	defer release()
 	signal.Notify(signals, os.Interrupt)
 	defer signal.Stop(signals)
 	defer close(finished)

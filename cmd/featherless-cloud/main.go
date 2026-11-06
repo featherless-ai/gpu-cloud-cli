@@ -8,6 +8,7 @@ import (
 	"syscall"
 
 	"featherless.ai/featherless-cloud/internal/commands"
+	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/errs"
 	"featherless.ai/featherless-cloud/internal/output"
 	"featherless.ai/featherless-cloud/internal/update"
@@ -17,7 +18,29 @@ func main() {
 	// A closed pipe (`featherless-cloud volume find … | head`) ends the output
 	// with EPIPE instead of killing the process, as in the TypeScript CLI.
 	signal.Ignore(syscall.SIGPIPE)
+	stopOnInterrupt()
 	os.Exit(run(os.Args[1:]))
+}
+
+// A script's background job starts with Ctrl-C ignored, yet Node still ends on
+// it (exit 130), so scripts could stop the TypeScript CLI with kill -INT. Go
+// keeps an inherited ignore, so the CLI handles Ctrl-C itself then, leaving it
+// to commands that take it over (exec, ssh).
+func stopOnInterrupt() {
+	if !signal.Ignored(os.Interrupt) {
+		return
+	}
+
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, os.Interrupt)
+
+	go func() {
+		for range signals {
+			if !shared.SignalsTaken() {
+				os.Exit(130)
+			}
+		}
+	}()
 }
 
 func run(args []string) int {

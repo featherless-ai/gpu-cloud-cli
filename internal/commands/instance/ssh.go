@@ -163,6 +163,8 @@ func runSSH(args []string) (int, error) {
 	// Signals sent to the CLI itself must also reach its native SSH child.
 	signals := make(chan os.Signal, 1)
 	exited := make(chan struct{})
+	release := shared.TakeSignals()
+	defer release()
 	notifySignals(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
 
 	go func() {

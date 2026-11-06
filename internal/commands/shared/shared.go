@@ -12,6 +12,8 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 
 	"github.com/spf13/cobra"
 
@@ -1281,4 +1283,22 @@ func Profiles(word string, ctx *completion.Context) ([]string, error) {
 	}
 
 	return StartsWith(cfg.Profiles.Names(), word), nil
+}
+
+var signalsTaken atomic.Int32
+
+// TakeSignals marks that a command handles Ctrl-C itself (exec detaching from
+// a Run Job, ssh passing it on) until release is called.
+func TakeSignals() (release func()) {
+	signalsTaken.Add(1)
+	var once sync.Once
+
+	return func() {
+		once.Do(func() { signalsTaken.Add(-1) })
+	}
+}
+
+// SignalsTaken reports whether a command is handling Ctrl-C itself.
+func SignalsTaken() bool {
+	return signalsTaken.Load() > 0
 }
