@@ -5,6 +5,9 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
+
+	"featherless.ai/featherless-cloud/internal/errs"
 )
 
 // Option adds a flag that takes a value, declared as the TypeScript CLI
@@ -46,6 +49,70 @@ func HelpAfter(cmd *cobra.Command, text string) {
 		help(c, args)
 		fmt.Fprintln(c.OutOrStdout(), text)
 	})
+}
+
+// Arguments checks a command line in commander's order and words: required
+// options first, then the positional arguments cmd.Use names (<required>,
+// [optional], name... for the rest).
+func Arguments(cmd *cobra.Command, args []string) error {
+	var missing *pflag.Flag
+
+	cmd.Flags().VisitAll(func(flag *pflag.Flag) {
+		_, isRequired := flag.Annotations[cobra.BashCompOneRequiredFlag]
+
+		if missing == nil && isRequired && !flag.Changed {
+			missing = flag
+		}
+	})
+
+	if missing != nil {
+		return errs.Usagef("required option '%s' not specified", Spec(missing))
+	}
+
+	declared := strings.Fields(cmd.Use)[1:]
+	isVariadic := false
+
+	for index, token := range declared {
+		name := strings.Trim(token, "<>[]")
+		isVariadic = strings.HasSuffix(name, "...")
+
+		if strings.HasPrefix(token, "<") && index >= len(args) {
+			return errs.Usagef("missing required argument '%s'", strings.TrimSuffix(name, "..."))
+		}
+	}
+
+	if isVariadic || len(args) <= len(declared) {
+		return nil
+	}
+
+	plural := "s"
+
+	if len(declared) == 1 {
+		plural = ""
+	}
+
+	subcommand := ""
+
+	if cmd.HasParent() {
+		subcommand = " for '" + cmd.Name() + "'"
+	}
+
+	return errs.Usagef("too many arguments%s. Expected %d argument%s but got %d.", subcommand, len(declared), plural, len(args))
+}
+
+// Spec is a flag as declared, e.g. "-i, --identity <file>".
+func Spec(flag *pflag.Flag) string {
+	spec := "--" + flag.Name
+
+	if flag.Shorthand != "" {
+		spec = "-" + flag.Shorthand + ", " + spec
+	}
+
+	if placeholder, _ := pflag.UnquoteUsage(flag); placeholder != "" {
+		spec += " " + placeholder
+	}
+
+	return spec
 }
 
 func parseSpec(spec string) (name, shorthand, placeholder string) {

@@ -3,9 +3,10 @@ package registrykeys
 import (
 	"github.com/spf13/cobra"
 
+	"featherless.ai/featherless-cloud/internal/api"
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/completion"
-	"featherless.ai/featherless-cloud/internal/errs"
+	"featherless.ai/featherless-cloud/internal/output"
 )
 
 func newDeleteCommand() *cobra.Command {
@@ -17,9 +18,51 @@ func newDeleteCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <key>",
 		Short: "Remove a registry key",
-		Args:  cobra.ExactArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New("not implemented")
+			ctx := shared.NewContext(cmd)
+
+			client, err := shared.Client(opts.profile)
+			if err != nil {
+				return err
+			}
+
+			keys, err := output.Spin(ctx, "Finding registry key", func() ([]api.RegistryCredential, error) {
+				return client.RegistryCredentials(cmd.Context())
+			})
+
+			if err != nil {
+				return err
+			}
+
+			id, err := shared.ResolveCredentialRef(keys, args[0])
+			if err != nil {
+				return err
+			}
+
+			name := ""
+
+			for _, key := range keys {
+				if key.ID == id {
+					name = key.Name
+				}
+			}
+
+			if err := shared.RequireDeletion(ctx, "registry key "+name, opts.yes); err != nil {
+				return err
+			}
+
+			_, err = output.Spin(ctx, "Removing registry key", func() (int, error) {
+				return client.DeleteRegistryCredential(cmd.Context(), id)
+			})
+
+			if err != nil {
+				return explainForbidden(err)
+			}
+
+			ctx.Success("Removed registry key " + name + ".")
+
+			return nil
 		},
 	}
 

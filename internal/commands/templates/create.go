@@ -3,10 +3,16 @@ package templates
 import (
 	"github.com/spf13/cobra"
 
+	"featherless.ai/featherless-cloud/internal/api"
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/completion"
 	"featherless.ai/featherless-cloud/internal/errs"
+	"featherless.ai/featherless-cloud/internal/output"
 )
+
+func shortIDText(template api.Template) func() output.Result {
+	return func() output.Result { return output.Result{Text: template.ShortID} }
+}
 
 func newCreateCommand() *cobra.Command {
 	var flags templateFlags
@@ -17,9 +23,44 @@ func newCreateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "create <name>",
 		Short: "Save launch settings as a template, private unless --visibility organization",
-		Args:  cobra.ExactArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New("not implemented")
+			name := args[0]
+
+			if err := shared.AssertInstanceName(name); err != nil {
+				return err
+			}
+
+			if flags.template == "" && flags.image == "" {
+				return errs.New("Pass --image, or --template to start from an official template.")
+			}
+
+			ctx := shared.NewContext(cmd)
+
+			client, err := shared.Client(opts.profile)
+			if err != nil {
+				return err
+			}
+
+			body, err := templateBody(client, flags, cmd, ctx)
+			if err != nil {
+				return err
+			}
+
+			body.Name = &name
+
+			template, err := output.Spin(ctx, "Saving template", func() (api.Template, error) {
+				return client.CreateTemplate(cmd.Context(), body)
+			})
+
+			if err != nil {
+				return err
+			}
+
+			ctx.Success("Saved template " + template.Name + ". Launch it with featherless-cloud instance create --template " + template.Name + ".")
+			ctx.Output(template, shortIDText(template))
+
+			return nil
 		},
 	}
 

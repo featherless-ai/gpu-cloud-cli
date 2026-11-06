@@ -14,7 +14,7 @@ func newCompletionCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "completion <shell>",
 		Short: "Print a shell completion script (bash, zsh)",
-		Args:  cobra.ExactArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			script := completion.ZshScript()
 

@@ -1,11 +1,22 @@
 package commands
 
 import (
+	"io"
+
 	"github.com/spf13/cobra"
 
 	"featherless.ai/featherless-cloud/internal/commands/shared"
-	"featherless.ai/featherless-cloud/internal/errs"
+	"featherless.ai/featherless-cloud/internal/output"
+	"featherless.ai/featherless-cloud/internal/update"
+	"featherless.ai/featherless-cloud/internal/version"
 )
+
+type upgradeResult struct {
+	Package  string `json:"package"`
+	Current  string `json:"current"`
+	Latest   string `json:"latest"`
+	Upgraded bool   `json:"upgraded"`
+}
 
 func newUpgradeCommand() *cobra.Command {
 	var opts struct {
@@ -15,9 +26,41 @@ func newUpgradeCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "upgrade",
 		Short: "Upgrade featherless-cloud to the latest published version",
-		Args:  cobra.NoArgs,
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New("not implemented")
+			ctx := shared.NewContext(cmd)
+			current := version.Version
+
+			latest, err := output.Spin(ctx, "Checking for updates", func() (string, error) {
+				return update.FetchLatestVersion(cmd.Context())
+			})
+
+			if err != nil {
+				return err
+			}
+
+			if !opts.force && !version.IsNewer(latest, current) {
+				result := upgradeResult{Package: version.PackageName, Current: current, Latest: latest, Upgraded: false}
+				ctx.Output(result, func() output.Result { return output.Result{Text: "Already up to date (" + current + ")."} })
+
+				return nil
+			}
+
+			// The installer's output keeps stdout one JSON document in --json mode.
+			var installerOutput io.Writer = ctx.Stdout
+
+			if ctx.Mode == output.JSON {
+				installerOutput = ctx.Stderr
+			}
+
+			if err := update.Upgrade(update.CurrentInstall(), latest, installerOutput); err != nil {
+				return err
+			}
+
+			result := upgradeResult{Package: version.PackageName, Current: current, Latest: latest, Upgraded: true}
+			ctx.Output(result, func() output.Result { return output.Result{Text: "Upgraded " + current + " → " + latest + "."} })
+
+			return nil
 		},
 	}
 

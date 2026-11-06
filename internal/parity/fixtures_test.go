@@ -147,3 +147,42 @@ const ledger = `{"items": [
   {"id": "l1", "type": "usage", "amountMicros": "-2512345", "description": "research", "resourceKind": "instance", "resourceName": "research", "skuDisplayName": "MI325X", "unit": "gpu_hour", "quantity": "1.0049", "chargedAt": "2026-11-05T00:00:00.000Z", "chargedUntil": "2026-11-06T00:00:00.000Z"},
   {"id": "l2", "type": "top_up", "amountMicros": "50000000", "description": "Top up", "resourceKind": null, "resourceName": null, "skuDisplayName": null, "unit": null, "quantity": null, "chargedAt": "2026-11-01T00:00:00.000Z", "chargedUntil": "2026-11-01T00:00:00.000Z"}
 ], "pagination": {"page": 1, "pageSize": 50, "totalItems": 2, "totalPages": 1}}`
+
+// Responses for the instance, Run Job, template and key commands that change things.
+
+const instanceStarting = `{
+  "id": "6f1c2d3e-4a5b-4c6d-8e7f-901a2b3c4d5e", "shortId": "rcsrvch012", "name": "research",
+  "computeLabel": "2x MI325X", "computeType": "gpu", "gpuCount": 2, "state": "starting", "startupStage": "downloading_image",
+  "costMicrosPerHour": "5000000", "ephemeralDiskGiB": 100,
+  "resources": {"gpuModel": null, "gpuMemoryGiB": 256, "cpuCores": 26, "memoryGiB": 448},
+  "templateVersion": {"id": "1b2c3d4e-5f60-4718-9a2b-3c4d5e6f7081", "version": "2.4.0", "name": "PyTorch", "image": "featherlesscloud/pytorch:2.4.0"},
+  "template": null, "command": [], "lastError": "Image pull is slow; still trying.",
+  "createdAt": "2026-11-05T07:58:00.000Z"
+}`
+
+const runJobQueued = `{
+  "id": "5e6f7081-92a3-44b5-86c7-d8e9f0a1b2c3", "shortId": "jb7xk2mq9z", "name": "nightly-eval", "state": "queued",
+  "admissionState": "waiting", "admittedAt": null,
+  "computeType": "gpu", "computeSku": "run-job.gpu.mi325x.1", "gpuCount": 2,
+  "resources": {"gpuModel": null, "gpuMemoryGiB": 256, "cpuCores": 26, "memoryGiB": 448},
+  "ephemeralDiskGiB": 20, "command": ["python", "eval.py"], "workingDirectory": "/workspace",
+  "environment": [], "timeoutSeconds": 3600, "preemptionRetries": 0, "attemptNumber": 1,
+  "attempts": [{"number": 1, "state": "queued", "scheduledAt": null, "startedAt": null, "finishedAt": null, "exitCode": null, "containerRunId": null}],
+  "retainLogs": true, "logsComplete": false, "logsTruncated": false, "exitCode": null,
+  "statusReason": "queue_capacity", "statusMessage": "Waiting for GPUs to free up.",
+  "scheduledAt": null, "startedAt": null, "finishedAt": null,
+  "costMicrosPerHour": "3000000", "computeDiscount": {"name": "Off-peak", "listUnitPriceMicros": "2000000", "unitPriceMicros": "1500000"},
+  "image": {"source": "template", "reference": "featherlesscloud/pytorch:2.4.0"},
+  "networkVolumeMounts": [],
+  "createdAt": "2026-11-05T01:00:00.000Z", "updatedAt": "2026-11-05T01:00:00.000Z"
+}`
+
+const sshKeyAdded = `{"data": {"id": "6a708192-a3b4-45c6-97d8-e9f0a1b2c3d4", "name": "build box", "fingerprint": "SHA256:ghijkl", "createdAt": "2026-11-06T00:00:00.000Z"}}`
+
+const registryCredentialAdded = `{"data": {"id": "7b8192a3-b4c5-46d7-a8e9-f0a1b2c3d4e5", "name": "ghcr2", "registry": "ghcr.io", "username": "bot", "updatedAt": "2026-11-06T00:00:00.000Z"}}`
+
+const ledgerMetered = `{"items": [
+  {"id": "l3", "type": "usage", "amountMicros": "-4500", "description": "gpu use", "resourceKind": "job", "resourceName": "nightly-eval", "skuDisplayName": "MI325X", "unit": "gpu_second", "quantity": "4545", "chargedAt": "2026-11-05T00:00:00.000Z", "chargedUntil": "2026-11-05T00:00:00.000Z"},
+  {"id": "l4", "type": "usage", "amountMicros": "-120", "description": "cpu use", "resourceKind": "instance", "resourceName": null, "skuDisplayName": "8 vCPU", "unit": "vcpu_second", "quantity": "450", "chargedAt": "2026-11-04T00:00:00.000Z", "chargedUntil": "2026-11-05T00:00:00.000Z"},
+  {"id": "l5", "type": "adjustment", "amountMicros": "0", "description": "Goodwill credit", "resourceKind": null, "resourceName": null, "skuDisplayName": null, "unit": null, "quantity": null, "chargedAt": "2026-11-03T00:00:00.000Z", "chargedUntil": "2026-11-03T00:00:00.000Z"}
+], "pagination": {"page": 1, "pageSize": 50, "totalItems": 40, "totalPages": 14}}`

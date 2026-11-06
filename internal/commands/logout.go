@@ -5,6 +5,7 @@ import (
 
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/completion"
+	"featherless.ai/featherless-cloud/internal/config"
 	"featherless.ai/featherless-cloud/internal/errs"
 )
 
@@ -16,9 +17,38 @@ func newLogoutCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "logout",
 		Short: "Remove stored credentials for a profile",
-		Args:  cobra.NoArgs,
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New("not implemented")
+			ctx := shared.NewContext(cmd)
+
+			cfg, err := shared.LoadConfig()
+			if err != nil {
+				return err
+			}
+
+			name := cfg.CurrentProfile
+
+			if cmd.Flags().Changed("profile") {
+				name = opts.profile
+			}
+
+			if _, exists := cfg.Profiles.Get(name); name == "" || !exists {
+				return errs.New("Not logged in.")
+			}
+
+			cfg.Profiles.Delete(name)
+
+			if cfg.CurrentProfile == name {
+				cfg.CurrentProfile = ""
+			}
+
+			if err := config.Save(cfg); err != nil {
+				return err
+			}
+
+			ctx.Success("Signed out of profile \"" + name + "\". Note: revoke the key at " + config.ConsoleBaseURL() + "/credentials/api-keys to fully disconnect this device.")
+
+			return nil
 		},
 	}
 

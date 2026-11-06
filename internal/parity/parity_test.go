@@ -296,6 +296,40 @@ func scenarios() []scenario {
 	all = append(all, both("templates show", "templates", "show", "pytorch")...)
 	all = append(all, both("volume get", "volume", "get", "datasets")...)
 	all = append(all, both("volume ls", "volume", "ls")...)
+	all = append(all, both("volume ls human", "volume", "ls", "-h")...)
+	all = append(all, both("volume create too small", "volume", "create", "scratch", "--gb", "5")...)
+	all = append(all, both("volume update nothing", "volume", "update", "datasets")...)
+	all = append(all, both("volume update shrink", "volume", "update", "datasets", "--gb", "100")...)
+	all = append(all, both("volume rm without yes", "volume", "rm", "vol://datasets/old.bin")...)
+	all = append(all, both("volume rm root", "volume", "rm", "vol://datasets/")...)
+	all = append(all, both("volume cp one path", "volume", "cp", "vol://datasets/a")...)
+	all = append(all, both("volume cp local only", "volume", "cp", "./a", "./b")...)
+	all = append(all, both("volume cp mixed sources", "volume", "cp", "./a", "vol://datasets/a", "vol://datasets/")...)
+	all = append(all, both("volume cp bad concurrency", "volume", "cp", "./a", "vol://datasets/", "--concurrency", "0")...)
+	all = append(all, both("volume mv root", "volume", "mv", "vol://datasets", "vol://datasets/x")...)
+	all = append(all, both("volume find name and iname", "volume", "find", "vol://datasets", "--name", "a", "--iname", "b")...)
+	all = append(all, both("volume find bad size", "volume", "find", "vol://datasets", "--size", "10G")...)
+	all = append(all, both("volume find bad type", "volume", "find", "vol://datasets", "--type", "x")...)
+	all = append(all, both("volume sync bad mode", "volume", "sync", ".", "vol://datasets/", "--mode", "sideways")...)
+	all = append(all, both("volume get unknown", "volume", "get", "nosuch")...)
+
+	volumeChanges := []struct {
+		scenario []scenario
+		key      string
+		answer   route
+	}{
+		{both("volume create", "volume", "create", "scratch", "--gb", "50"), "POST /volumes/", route{status: 201, body: volumeDatasets}},
+		{both("volume update rename", "volume", "update", "datasets", "--name", "renamed"), "PATCH /volumes/9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d", route{status: 200, body: volumeDatasets}},
+		{both("volume delete", "volume", "delete", "datasets", "--yes"), "DELETE /volumes/9a8b7c6d-5e4f-4a3b-9c2d-1e0f9a8b7c6d?detach=true", route{status: 202, body: ""}},
+	}
+
+	for _, change := range volumeChanges {
+		for _, s := range change.scenario {
+			s.routes = with(account(), change.key, change.answer)
+			all = append(all, s)
+		}
+	}
+
 	all = append(all, both("runjob list", "runjob", "list")...)
 	all = append(all, both("job get", "job", "get", "jb7xk2mq9z")...)
 	all = append(all, both("job logs", "job", "logs", "jb7xk2mq9z", "--tail", "10")...)
@@ -373,6 +407,8 @@ func scenarios() []scenario {
 			routes: account(),
 		})
 	}
+
+	all = append(all, commandScenarios()...)
 
 	return all
 }
@@ -474,4 +510,116 @@ func compare(t *testing.T, what, want, got string) {
 	if want != got {
 		t.Errorf("%s differs\n--- TypeScript\n%s\n--- Go\n%s", what, want, got)
 	}
+}
+
+// commandScenarios cover the instance, Run Job, template, key and billing
+// commands that change things or report errors.
+func commandScenarios() []scenario {
+	ok := func(body string) route { return route{status: 200, body: body} }
+	noContent := route{status: 204, body: ""}
+	research := "/instances/6f1c2d3e-4a5b-4c6d-8e7f-901a2b3c4d5e"
+
+	both := func(name string, routes map[string]route, args ...string) []scenario {
+		return []scenario{
+			{name: name + " (plain)", args: append([]string{"--non-interactive"}, args...), routes: routes},
+			{name: name + " (json)", args: append([]string{"--json"}, args...), routes: routes},
+		}
+	}
+
+	routes := account()
+	routes["POST /instances/rcsrvch012/start"] = ok(instanceResearch)
+	routes["POST "+research+"/restart"] = ok(instanceResearch)
+	routes["POST /run-jobs/jb7xk2mq9z/cancel"] = ok(runJob)
+	routes["DELETE /run-jobs/jb7xk2mq9z"] = ok(runJob)
+	routes["POST /templates/"] = ok(templateMine)
+	routes["PATCH /templates/2c3d4e5f-6071-4829-8a3b-4c5d6e7f8091"] = ok(templateMine)
+	routes["DELETE /templates/2c3d4e5f-6071-4829-8a3b-4c5d6e7f8091"] = noContent
+	routes["POST /me/ssh-keys"] = ok(sshKeyAdded)
+	routes["DELETE /me/ssh-keys/5f607182-93a4-45b6-87c8-d9e0f1a2b3c4"] = noContent
+	routes["POST /registry-credentials"] = ok(registryCredentialAdded)
+	routes["PATCH /registry-credentials/4c5d6e7f-8091-4a2b-8c3d-4e5f60718293"] = ok(registryCredentialAdded)
+	routes["DELETE /registry-credentials/4c5d6e7f-8091-4a2b-8c3d-4e5f60718293"] = noContent
+
+	var all []scenario
+	all = append(all, both("instance start", routes, "instance", "start", "rcsrvch012")...)
+	all = append(all, both("instance restart by name", routes, "instance", "restart", "research")...)
+	all = append(all, both("instance delete without --yes", routes, "instance", "delete", "rcsrvch012")...)
+	all = append(all, both("instance update nothing", routes, "instance", "update", "rcsrvch012")...)
+	all = append(all, both("instance update everything", routes, "instance", "update", "rcsrvch012", "--image", " ghcr.io/acme/tool:2 ", "--registry", "GHCR", "--disk", "300", "--command", "  python  serve.py ", "--env", "A=1", "--env", "B=x=y", "--port", "8080", "--port", "9090")...)
+	all = append(all, both("instance update public pulls", routes, "instance", "update", "rcsrvch012", "--registry", "null", "--command", "")...)
+	all = append(all, both("instance update bad port", routes, "instance", "update", "rcsrvch012", "--port", "8080", "--port", "8080")...)
+	all = append(all, both("instance logs head", routes, "instance", "logs", "rcsrvch012", "--head", "--tail", "3")...)
+	all = append(all, both("instance logs bad tail", routes, "instance", "logs", "rcsrvch012", "--tail", "0")...)
+	all = append(all, both("instance logs head and follow", routes, "instance", "logs", "rcsrvch012", "--head", "--follow")...)
+	all = append(all, both("instance create from a template", routes, "instance", "create", "--name", "trainer", "--template", "my-trainer")...)
+	all = append(all, both("instance create official version", routes, "instance", "create", "--name", "trainer", "--template", "pytorch:2.3.1", "--gpu-count", "8", "--disk", "500")...)
+	all = append(all, both("instance create unknown version", routes, "instance", "create", "--name", "trainer", "--template", "pytorch:9.9")...)
+	all = append(all, both("instance create cpu", routes, "instance", "create", "--name", "cpu-box", "--image", "ubuntu:24.04", "--compute-type", "cpu", "--cpu-cores", "8", "--secret", "TOKEN=x", "--command", "sleep infinity")...)
+	all = append(all, both("instance create unknown cpu size", routes, "instance", "create", "--name", "cpu-box", "--image", "ubuntu:24.04", "--compute-type", "cpu", "--cpu-cores", "6")...)
+	all = append(all, both("instance create bad name", routes, "instance", "create", "--name", "Bad_Name", "--image", "ubuntu:24.04")...)
+	all = append(all, both("instance create registry without image", routes, "instance", "create", "--name", "trainer", "--registry", "ghcr")...)
+	all = append(all, both("instance create bad volume", routes, "instance", "create", "--name", "trainer", "--image", "ubuntu:24.04", "--volume", "datasets")...)
+
+	atLimit := with(routes, "GET /organization", ok(`{"data": {"organization": {"id": "o1", "name": "Acme", "slug": "acme"}, "membership": {"id": "m1", "role": "owner"}, "gpuCount": 8, "gpuLimit": 8, "cpuCount": 0, "cpuLimit": 128}}`))
+	all = append(all, both("instance create at the GPU limit", atLimit, "instance", "create", "--name", "trainer", "--image", "ubuntu:24.04")...)
+
+	starting := with(routes, "GET /instances/rcsrvch012", ok(instanceStarting))
+	all = append(all, both("instance get while starting", starting, "instance", "get", "rcsrvch012")...)
+
+	all = append(all, scenario{name: "exec attached", args: []string{"--non-interactive", "exec", "--name", "nightly-eval", "--cpu-cores", "4", "--", "python", "eval.py"}, routes: routes})
+	all = append(all, scenario{name: "exec json without detach", args: []string{"--json", "exec", "--cpu-cores", "4", "--", "python", "eval.py"}, routes: routes})
+	all = append(all, both("exec without a command", routes, "exec", "--detach", "--cpu-cores", "4")...)
+	all = append(all, both("exec cpu and gpu", routes, "exec", "--detach", "--cpu-cores", "4", "--gpu-count", "1", "--", "true")...)
+	all = append(all, both("exec bad timeout", routes, "exec", "--detach", "--cpu-cores", "4", "--timeout", "0", "--", "true")...)
+	all = append(all, both("exec from a template", routes, "exec", "--detach", "--name", "train", "--template", "my-trainer", "--registry", "ghcr", "--idempotency-key", "retry-1", "--no-retain-logs", "--preemption-retries", "2", "--", "python", "train.py")...)
+	all = append(all, both("exec on gpus", routes, "exec", "--detach", "--name", "train", "--gpu-type", "mi325", "--image", "python:3.12", "--volume", "datasets:/data", "--secret", "K=v", "--workdir", "/data", "--", "python", "train.py")...)
+
+	all = append(all, both("job cancel", routes, "job", "cancel", "jb7xk2mq9z")...)
+	all = append(all, both("job delete", routes, "runjob", "delete", "jb7xk2mq9z", "--yes")...)
+	all = append(all, both("job logs follow json", routes, "job", "logs", "jb7xk2mq9z", "--follow")...)
+	all = append(all, both("job logs missing attempt", routes, "job", "logs", "jb7xk2mq9z", "--attempt", "7")...)
+
+	queued := with(routes, "GET /run-jobs/jb7xk2mq9z", ok(runJobQueued))
+	all = append(all, both("job get waiting at a discount", queued, "job", "get", "jb7xk2mq9z")...)
+
+	all = append(all, both("templates create", routes, "templates", "create", "trainer", "--image", "ghcr.io/acme/trainer:1", "--gpu-count", "1", "--env", "EPOCHS=3", "--visibility", "organization", "--tag", "AMD", "--tag", "CUDA 12.8", "--port", "8080", "--description", "")...)
+	all = append(all, both("templates create from official", routes, "templates", "create", "trainer", "--template", "pytorch:2.3.1", "--disk", "100", "--volume", "datasets:/data", "--registry", "ghcr")...)
+	all = append(all, both("templates create without an image", routes, "templates", "create", "trainer")...)
+	all = append(all, both("templates create both template and image", routes, "templates", "create", "trainer", "--template", "pytorch", "--image", "x:1")...)
+	all = append(all, both("templates update", routes, "templates", "update", "my-trainer", "--name", "renamed", "--command", "", "--compute-type", "cpu", "--secret", "A=b")...)
+	all = append(all, both("templates update nothing", routes, "templates", "update", "my-trainer")...)
+	all = append(all, both("templates delete", routes, "templates", "delete", "my-trainer", "--yes")...)
+	all = append(all, both("templates show missing", routes, "templates", "show", "nope")...)
+
+	all = append(all, both("ssh-keys add without a key", routes, "ssh-keys", "add")...)
+	all = append(all, both("ssh-keys add unreadable file", routes, "ssh-keys", "add", "/nonexistent/id.pub")...)
+	all = append(all, both("ssh-keys delete", routes, "ssh-keys", "delete", "Laptop", "--yes")...)
+	all = append(all, both("ssh-keys delete unknown", routes, "ssh-keys", "delete", "nope", "--yes")...)
+
+	for _, s := range both("registry-keys add", routes, "registry-keys", "add", "ghcr2", "--server", "ghcr.io", "--username", "bot", "--password-stdin") {
+		s.stdin = "s3cret\r\n"
+		all = append(all, s)
+	}
+
+	for _, s := range both("registry-keys add empty stdin", routes, "registry-keys", "add", "ghcr2", "--server", "ghcr.io", "--username", "bot", "--password-stdin") {
+		s.stdin = "\n"
+		all = append(all, s)
+	}
+
+	forbidden := with(routes, "POST /registry-credentials", route{status: 403, body: `{"error":{"code":"forbidden","message":"Missing scope."}}`})
+
+	for _, s := range both("registry-keys add forbidden", forbidden, "registry-keys", "add", "ghcr2", "--server", "ghcr.io", "--username", "bot", "--password-stdin") {
+		s.stdin = "s3cret"
+		all = append(all, s)
+	}
+
+	all = append(all, both("registry-keys add without stdin", routes, "registry-keys", "add", "ghcr2", "--server", "ghcr.io", "--username", "bot")...)
+	all = append(all, both("registry-keys update", routes, "registry-keys", "update", "ghcr", "--name", "ghcr2", "--server", "ghcr.io")...)
+	all = append(all, both("registry-keys update nothing", routes, "registry-keys", "update", "ghcr")...)
+	all = append(all, both("registry-keys delete", routes, "registry-keys", "delete", "4c5d6e7f-8091-4a2b-8c3d-4e5f60718293", "--yes")...)
+
+	metered := with(routes, "GET /billing/ledger", ok(ledgerMetered))
+	all = append(all, both("billing history metered", metered, "billing", "history")...)
+
+	return all
 }

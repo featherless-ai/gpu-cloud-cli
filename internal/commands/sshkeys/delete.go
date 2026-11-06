@@ -3,9 +3,10 @@ package sshkeys
 import (
 	"github.com/spf13/cobra"
 
+	"featherless.ai/featherless-cloud/internal/api"
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/completion"
-	"featherless.ai/featherless-cloud/internal/errs"
+	"featherless.ai/featherless-cloud/internal/output"
 )
 
 func newDeleteCommand() *cobra.Command {
@@ -17,9 +18,43 @@ func newDeleteCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <key>",
 		Short: "Remove an SSH public key",
-		Args:  cobra.ExactArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New("not implemented")
+			ctx := shared.NewContext(cmd)
+
+			client, err := shared.Client(opts.profile)
+			if err != nil {
+				return err
+			}
+
+			keys, err := output.Spin(ctx, "Finding SSH key", func() ([]api.SSHKey, error) {
+				return client.SSHKeys(cmd.Context())
+			})
+
+			if err != nil {
+				return err
+			}
+
+			key, err := shared.ResolveSSHKeyRef(keys, args[0])
+			if err != nil {
+				return err
+			}
+
+			if err := shared.RequireDeletion(ctx, "SSH key "+key.Name, opts.yes); err != nil {
+				return err
+			}
+
+			_, err = output.Spin(ctx, "Removing SSH key", func() (int, error) {
+				return client.DeleteSSHKey(cmd.Context(), key.ID)
+			})
+
+			if err != nil {
+				return err
+			}
+
+			ctx.Success("Removed SSH key " + key.Name + ".")
+
+			return nil
 		},
 	}
 

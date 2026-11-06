@@ -3,10 +3,15 @@ package job
 import (
 	"github.com/spf13/cobra"
 
+	"featherless.ai/featherless-cloud/internal/api"
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/completion"
-	"featherless.ai/featherless-cloud/internal/errs"
+	"featherless.ai/featherless-cloud/internal/output"
 )
+
+func stateText(job api.RunJob) func() output.Result {
+	return func() output.Result { return output.Result{Text: "STATE " + string(job.State)} }
+}
 
 func newCancelCommand() *cobra.Command {
 	var opts struct {
@@ -16,9 +21,27 @@ func newCancelCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cancel <id>",
 		Short: "Cancel a queued or running Run Job",
-		Args:  cobra.ExactArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New("not implemented")
+			ctx := shared.NewContext(cmd)
+
+			client, err := shared.Client(opts.profile)
+			if err != nil {
+				return err
+			}
+
+			job, err := output.Spin(ctx, "Cancelling Run Job", func() (api.RunJob, error) {
+				return client.CancelJob(cmd.Context(), args[0])
+			})
+
+			if err != nil {
+				return err
+			}
+
+			ctx.Success("Cancellation started for " + job.Name + " (" + job.ShortID + ").")
+			ctx.Output(job, stateText(job))
+
+			return nil
 		},
 	}
 
@@ -38,9 +61,31 @@ func newDeleteCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "delete <id>",
 		Short: "Delete a Run Job record",
-		Args:  cobra.ExactArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New("not implemented")
+			ctx := shared.NewContext(cmd)
+
+			client, err := shared.Client(opts.profile)
+			if err != nil {
+				return err
+			}
+
+			if err := shared.RequireDeletion(ctx, "Run Job "+args[0], opts.yes); err != nil {
+				return err
+			}
+
+			job, err := output.Spin(ctx, "Deleting Run Job", func() (api.RunJob, error) {
+				return client.DeleteJob(cmd.Context(), args[0])
+			})
+
+			if err != nil {
+				return err
+			}
+
+			ctx.Success("Run Job deletion started for " + job.Name + " (" + job.ShortID + ").")
+			ctx.Output(job, stateText(job))
+
+			return nil
 		},
 	}
 

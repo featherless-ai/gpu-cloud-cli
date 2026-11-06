@@ -1,8 +1,12 @@
 package registrykeys
 
 import (
+	"io"
+	"strings"
+
 	"github.com/spf13/cobra"
 
+	"featherless.ai/featherless-cloud/internal/api"
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/completion"
 	"featherless.ai/featherless-cloud/internal/errs"
@@ -12,13 +16,57 @@ import (
 // readSecret reads the registry password from stdin, or prompts for it; never
 // from a flag, so it stays out of shell history.
 func readSecret(ctx *output.Context, fromStdin bool) (string, error) {
-	return "", errs.New("not implemented")
+	if fromStdin {
+		data, err := io.ReadAll(ctx.Stdin)
+		if err != nil {
+			return "", err
+		}
+
+		secret := string(data)
+
+		if strings.HasSuffix(secret, "\n") {
+			secret = strings.TrimSuffix(strings.TrimSuffix(secret, "\n"), "\r")
+		}
+
+		if secret == "" {
+			return "", errs.New("No password on stdin.")
+		}
+
+		return secret, nil
+	}
+
+	if ctx.Mode != output.Interactive {
+		return "", errs.New("Pass the password or access token on stdin with --password-stdin.")
+	}
+
+	validate := func(value string) error {
+		if value == "" {
+			return errs.New("Enter the password or access token.")
+		}
+
+		return nil
+	}
+
+	secret, err := ctx.Prompt.Password("Password or access token", validate)
+	if err != nil {
+		return "", shared.PromptFailure(ctx, err)
+	}
+
+	return secret, nil
 }
 
 // explainForbidden says why a change was refused: registry keys belong to the
 // organization, and only owners and admins may change them.
 func explainForbidden(err error) error {
+	if errs.IsKind(err, errs.KindForbidden) {
+		return errs.New("Only organization owners and admins can change registry keys, with an API key that has Account write access.")
+	}
+
 	return err
+}
+
+func idText(key api.RegistryCredential) func() output.Result {
+	return func() output.Result { return output.Result{Text: key.ID} }
 }
 
 func newAddCommand() *cobra.Command {
@@ -32,9 +80,35 @@ func newAddCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add <name>",
 		Short: "Add a registry login for pulling private images",
-		Args:  cobra.ExactArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New("not implemented")
+			ctx := shared.NewContext(cmd)
+
+			auth, err := shared.ResolveAuth(opts.profile)
+			if err != nil {
+				return err
+			}
+
+			secret, err := readSecret(ctx, opts.passwordStdin)
+			if err != nil {
+				return err
+			}
+
+			client := shared.NewCloud(auth.APIBase, auth.APIKey)
+			body := api.RegistryCredentialBody{Name: args[0], Registry: opts.server, Username: opts.username, Secret: secret}
+
+			key, err := output.Spin(ctx, "Adding registry key", func() (api.RegistryCredential, error) {
+				return client.AddRegistryCredential(cmd.Context(), body)
+			})
+
+			if err != nil {
+				return explainForbidden(err)
+			}
+
+			ctx.Success("Added registry key " + key.Name + " for " + key.Registry + ". Use it with --registry " + key.Name + ".")
+			ctx.Output(key, idText(key))
+
+			return nil
 		},
 	}
 

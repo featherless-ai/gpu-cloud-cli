@@ -1,12 +1,25 @@
 package instance
 
 import (
+	"fmt"
+	"strconv"
+
 	"github.com/spf13/cobra"
 
+	"featherless.ai/featherless-cloud/internal/api"
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/completion"
-	"featherless.ai/featherless-cloud/internal/errs"
+	"featherless.ai/featherless-cloud/internal/output"
+	"featherless.ai/featherless-cloud/internal/version"
 )
+
+func stateLabel(state api.InstanceState, stage *api.StartupStage) string {
+	if stage == nil || *stage == "" {
+		return string(state)
+	}
+
+	return fmt.Sprintf("%s (%s)", state, *stage)
+}
 
 func newListCommand() *cobra.Command {
 	var opts struct {
@@ -18,9 +31,55 @@ func newListCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List GPU instances",
-		Args:  cobra.NoArgs,
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return errs.New("not implemented")
+			ctx := shared.NewContext(cmd)
+
+			client, err := shared.Client(opts.profile)
+			if err != nil {
+				return err
+			}
+
+			page := int(shared.ParseNumber(opts.page))
+			limit := int(shared.ParseNumber(opts.limit))
+
+			data, err := output.Spin(ctx, "Fetching instances", func() (api.InstanceList, error) {
+				return client.ListInstances(cmd.Context(), page, limit)
+			})
+
+			if err != nil {
+				return err
+			}
+
+			ctx.Output(data, func() output.Result {
+				rows := make([][]string, len(data.Items))
+
+				for i, item := range data.Items {
+					gpus := strconv.Itoa(item.GPUCount)
+
+					if item.ComputeType == api.ComputeCPU {
+						gpus = "-"
+					}
+
+					rows[i] = []string{
+						item.Name,
+						item.ShortID,
+						stateLabel(item.State, item.StartupStage),
+						item.ComputeLabel,
+						gpus,
+						version.FormatDollars(item.CostMicrosPerHour) + "/hr",
+						shared.Slice(item.CreatedAt, 10),
+					}
+				}
+
+				pagination := data.Pagination
+				footer := fmt.Sprintf("Page %d of %d (%d total)", pagination.Page, pagination.TotalPages, pagination.TotalItems)
+				table := &output.Table{Header: []string{"NAME", "ID", "STATE", "COMPUTE", "GPU", "PRICE/HR", "CREATED"}, Rows: rows}
+
+				return output.Result{Table: table, Footer: footer}
+			})
+
+			return nil
 		},
 	}
 
