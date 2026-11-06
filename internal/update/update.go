@@ -3,7 +3,12 @@
 package update
 
 import (
+	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"context"
+	"crypto/sha512"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -29,6 +34,8 @@ const (
 	stateFileName = "featherless-cloud-update-check.json"
 	ttl           = 24 * time.Hour
 	fetchTimeout  = 5 * time.Second
+	brewUpgrade   = "brew upgrade featherless-cloud"
+	installScript = "curl -fsSL https://console.cloud.featherless.ai/install.sh | sh"
 )
 
 // Commands that run without a person reading the output, or are about versions themselves.
@@ -47,8 +54,13 @@ type InstallMethod string
 const (
 	// InstallNpmGlobal is this package inside npm's global folder, the only install npm can update in place.
 	InstallNpmGlobal InstallMethod = "npm-global"
-	// InstallOther is any install the CLI cannot update in place.
+	// InstallOther is a copy inside a package manager's node_modules that npm can't
+	// update in place (npx caches, project installs); replacing it would desync that manager.
 	InstallOther InstallMethod = "other"
+	// InstallHomebrew is a binary in Homebrew's Cellar; brew upgrades it.
+	InstallHomebrew InstallMethod = "homebrew"
+	// InstallStandalone is a binary the installer or a person put in place; it replaces itself.
+	InstallStandalone InstallMethod = "standalone"
 )
 
 // Seams tests replace.
@@ -59,6 +71,7 @@ var (
 	stdinIsTerminal            = func() bool { return term.IsTerminal(int(os.Stdin.Fd())) }
 	prompter                   = output.New(output.Interactive).Prompt
 	currentInstall             = CurrentInstall
+	executablePath             = runningExecutable
 	// startBackgroundCheck re-runs this binary as `_check-update`, detached, without waiting.
 	startBackgroundCheck = startDetachedCheck
 )
@@ -114,10 +127,10 @@ func shouldSkip(argv []string) bool {
 }
 
 // OfferUpdate offers a newer version the last background check found, then
-// refreshes that check when it is a day old. An install the CLI can update in
-// place, at a terminal, is asked whether to update now; anything else gets a
-// one-line notice. Never touches the network itself. Call once at startup
-// with os.Args[1:].
+// refreshes that check when it is a day old. A global npm or standalone install
+// at a terminal is asked whether to update now; anything else gets a one-line
+// notice, pointing Homebrew installs at brew. Never touches the network itself.
+// Call once at startup with os.Args[1:].
 func OfferUpdate(argv []string) {
 	if shouldSkip(argv) {
 		return
@@ -127,12 +140,19 @@ func OfferUpdate(argv []string) {
 	shouldOffer := state != nil && version.IsNewer(state.Latest, version.Version) && state.Declined != state.Latest
 
 	if shouldOffer {
-		canUpdateInPlace := stdinIsTerminal() && currentInstall() == InstallNpmGlobal
+		method := currentInstall()
+		canUpdateInPlace := method == InstallNpmGlobal || method == InstallStandalone
+		shouldAsk := canUpdateInPlace && stdinIsTerminal()
+		hint := "featherless-cloud upgrade"
 
-		if canUpdateInPlace {
-			askToUpdate(*state)
+		if method == InstallHomebrew {
+			hint = brewUpgrade
+		}
+
+		if shouldAsk {
+			askToUpdate(*state, method)
 		} else {
-			fmt.Fprintf(stderr, "\nUpdate available: %s → %s. Run `featherless-cloud upgrade`.\n\n", version.Version, state.Latest)
+			fmt.Fprintf(stderr, "\nUpdate available: %s → %s. Run `%s`.\n\n", version.Version, state.Latest, hint)
 		}
 	}
 
@@ -146,7 +166,7 @@ func isStale(state updateState) bool {
 	return age > ttl.Milliseconds()
 }
 
-func askToUpdate(state updateState) {
+func askToUpdate(state updateState, method InstallMethod) {
 	message := fmt.Sprintf("featherless-cloud %s is available (you have %s). Update now?", state.Latest, version.Version)
 	shouldUpdate, err := prompter.Confirm(message, true)
 	isCancelled := errors.Is(err, output.ErrCancelled)
@@ -162,7 +182,7 @@ func askToUpdate(state updateState) {
 		return
 	}
 
-	if err := Upgrade(InstallNpmGlobal, state.Latest, os.Stdout); err != nil {
+	if err := Upgrade(context.Background(), method, state.Latest, os.Stdout); err != nil {
 		fmt.Fprintf(stderr, "\n%s\n\n", err.Error())
 		return
 	}
@@ -229,21 +249,9 @@ func FetchLatestVersion(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, fetchTimeout)
 	defer cancel()
 
-	url := registryBase + "/" + version.PackageName + "/latest"
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	body, err := registryGet(ctx, registryBase+"/"+version.PackageName+"/latest")
 	if err != nil {
 		return "", err
-	}
-
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		return "", errs.New("Could not reach the npm registry.")
-	}
-	defer response.Body.Close()
-
-	isOK := response.StatusCode >= 200 && response.StatusCode < 300
-	if !isOK {
-		return "", errs.Newf("Release lookup failed with status %d.", response.StatusCode)
 	}
 
 	var parsed struct {
@@ -252,7 +260,7 @@ func FetchLatestVersion(ctx context.Context) (string, error) {
 
 	malformed := errs.New("Release index is malformed.")
 
-	if err := json.NewDecoder(response.Body).Decode(&parsed); err != nil {
+	if err := json.Unmarshal(body, &parsed); err != nil {
 		return "", malformed
 	}
 
@@ -264,16 +272,53 @@ func FetchLatestVersion(ctx context.Context) (string, error) {
 	return latest, nil
 }
 
-// Upgrade installs release the way method updates. The installer's own output
-// goes to stdout; pass stderr in --json mode so stdout stays one JSON document.
-// Every method upgrades through npm until the others get their own installer.
-func Upgrade(method InstallMethod, release string, stdout io.Writer) error {
-	spec := version.PackageName + "@" + release
-	return npmInstall(spec, stdout)
+func registryGet(ctx context.Context, url string) ([]byte, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	unreachable := errs.New("Could not reach the npm registry.")
+
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		return nil, unreachable
+	}
+	defer response.Body.Close()
+
+	isOK := response.StatusCode >= 200 && response.StatusCode < 300
+	if !isOK {
+		return nil, errs.Newf("Release lookup failed with status %d.", response.StatusCode)
+	}
+
+	body, err := io.ReadAll(response.Body)
+	if err != nil {
+		return nil, unreachable
+	}
+
+	return body, nil
 }
 
-func npmInstall(spec string, stdout io.Writer) error {
-	child := exec.Command("npm", "install", "--global", "--prefer-online", spec)
+// Upgrade installs release the way method updates: brew for Homebrew, a
+// self-replacing download for standalone, npm otherwise (brew picks its own
+// version). Installer output goes to stdout; pass stderr in --json mode so
+// stdout stays one JSON document.
+func Upgrade(ctx context.Context, method InstallMethod, release string, stdout io.Writer) error {
+	switch method {
+	case InstallHomebrew:
+		return runInstaller(stdout, brewUpgrade, "brew", "upgrade", version.AppName)
+	case InstallStandalone:
+		return replaceExecutable(ctx, release)
+	default:
+		spec := version.PackageName + "@" + release
+		retry := "npm install --global " + spec
+		return runInstaller(stdout, retry, "npm", "install", "--global", "--prefer-online", spec)
+	}
+}
+
+// runInstaller runs a package manager; retry is the command to suggest when it fails.
+func runInstaller(stdout io.Writer, retry string, name string, args ...string) error {
+	child := exec.Command(name, args...)
 	child.Stdout = stdout
 	child.Stderr = os.Stderr
 
@@ -284,10 +329,182 @@ func npmInstall(spec string, stdout io.Writer) error {
 
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return errs.Newf("npm exited with code %d. Run: npm install --global %s", exitErr.ExitCode(), spec)
+		return errs.Newf("%s exited with code %d. Run: %s", name, exitErr.ExitCode(), retry)
 	}
 
-	return errs.Newf("Could not run npm: %s. Run: npm install --global %s", err.Error(), spec)
+	return errs.Newf("Could not run %s: %s. Run: %s", name, err.Error(), retry)
+}
+
+// platformPackage is the npm package holding the binary for goos and goarch.
+func platformPackage(goos, goarch string) (string, error) {
+	osNames := map[string]string{"darwin": "darwin", "linux": "linux", "windows": "win32"}
+	archNames := map[string]string{"arm64": "arm64", "amd64": "x64"}
+	osName, hasOS := osNames[goos]
+	archName, hasArch := archNames[goarch]
+
+	if !hasOS || !hasArch {
+		return "", errs.Newf("No featherless-cloud release for %s/%s.", goos, goarch)
+	}
+
+	return version.PackageName + "-" + osName + "-" + archName, nil
+}
+
+// replaceExecutable downloads release's binary for this platform and renames
+// it over the running executable.
+func replaceExecutable(ctx context.Context, release string) error {
+	executable, err := executablePath()
+	if err != nil {
+		return errs.Newf("Can't find the running featherless-cloud: %s. Run: %s", err.Error(), installScript)
+	}
+
+	// Claim the file first so an unwritable folder fails before the download.
+	staged := executable + ".new"
+
+	if err := os.WriteFile(staged, nil, 0o755); err != nil {
+		return cantReplace(executable, err)
+	}
+	defer os.Remove(staged)
+
+	binary, err := downloadBinary(ctx, release)
+	if err != nil {
+		return err
+	}
+
+	if err := os.WriteFile(staged, binary, 0o755); err != nil {
+		return cantReplace(executable, err)
+	}
+
+	if err := os.Chmod(staged, 0o755); err != nil {
+		return cantReplace(executable, err)
+	}
+
+	if runtime.GOOS != "windows" {
+		if err := os.Rename(staged, executable); err != nil {
+			return cantReplace(executable, err)
+		}
+
+		return nil
+	}
+
+	// Windows can't overwrite a running executable, but it can rename it.
+	aside := executable + ".old"
+	_ = os.Remove(aside)
+
+	if err := os.Rename(executable, aside); err != nil {
+		return cantReplace(executable, err)
+	}
+
+	if err := os.Rename(staged, executable); err != nil {
+		_ = os.Rename(aside, executable)
+		return cantReplace(executable, err)
+	}
+
+	return nil
+}
+
+func cantReplace(executable string, err error) error {
+	reason := err
+	var pathErr *os.PathError
+	var linkErr *os.LinkError
+
+	if errors.As(err, &pathErr) {
+		reason = pathErr.Err
+	} else if errors.As(err, &linkErr) {
+		reason = linkErr.Err
+	}
+
+	return errs.Newf("Can't replace %s: %s. Run: %s", executable, reason.Error(), installScript)
+}
+
+// downloadBinary fetches the platform package's tarball for release, checks it
+// against the registry's sha512 integrity, and returns the binary inside.
+func downloadBinary(ctx context.Context, release string) ([]byte, error) {
+	name, err := platformPackage(runtime.GOOS, runtime.GOARCH)
+	if err != nil {
+		return nil, err
+	}
+
+	lookupCtx, cancel := context.WithTimeout(ctx, fetchTimeout)
+	defer cancel()
+
+	body, err := registryGet(lookupCtx, registryBase+"/"+name+"/"+release)
+	if err != nil {
+		return nil, err
+	}
+
+	var index struct {
+		Dist struct {
+			Tarball   string `json:"tarball"`
+			Integrity string `json:"integrity"`
+		} `json:"dist"`
+	}
+
+	malformed := errs.New("Release index is malformed.")
+
+	if err := json.Unmarshal(body, &index); err != nil {
+		return nil, malformed
+	}
+
+	// Integrity is a list of "<algorithm>-<base64 digest>" entries.
+	expected := ""
+
+	for _, entry := range strings.Fields(index.Dist.Integrity) {
+		digest, isSHA512 := strings.CutPrefix(entry, "sha512-")
+
+		if isSHA512 {
+			expected = digest
+			break
+		}
+	}
+
+	if index.Dist.Tarball == "" || expected == "" {
+		return nil, malformed
+	}
+
+	tarball, err := registryGet(ctx, index.Dist.Tarball)
+	if err != nil {
+		return nil, err
+	}
+
+	sum := sha512.Sum512(tarball)
+	actual := base64.StdEncoding.EncodeToString(sum[:])
+
+	if actual != expected {
+		return nil, errs.Newf("Downloaded featherless-cloud %s failed its integrity check.", release)
+	}
+
+	invalid := errs.Newf("Downloaded featherless-cloud %s is not a valid release.", release)
+	binaryName := "package/bin/" + version.AppName
+
+	if runtime.GOOS == "windows" {
+		binaryName += ".exe"
+	}
+
+	decompressed, err := gzip.NewReader(bytes.NewReader(tarball))
+	if err != nil {
+		return nil, invalid
+	}
+
+	archive := tar.NewReader(decompressed)
+
+	for {
+		header, err := archive.Next()
+		if err != nil {
+			return nil, invalid
+		}
+
+		isBinary := header.Name == binaryName && header.Typeflag == tar.TypeReg
+		if !isBinary {
+			continue
+		}
+
+		binary, err := io.ReadAll(archive)
+		if err != nil {
+			return nil, invalid
+		}
+
+		return binary, nil
+	}
 }
 
 // packagePath is the package's folder relative to a node_modules folder.
@@ -311,22 +528,38 @@ func DetectInstall(executable string, npmRoots []string) InstallMethod {
 		}
 	}
 
-	return InstallOther
+	separator := string(filepath.Separator)
+	cellar := separator + "Cellar" + separator + version.AppName + separator
+
+	if strings.Contains(executable, cellar) {
+		return InstallHomebrew
+	}
+
+	if strings.Contains(executable, separator+"node_modules"+separator) {
+		return InstallOther
+	}
+
+	return InstallStandalone
 }
 
 // CurrentInstall detects how the running binary was installed.
 func CurrentInstall() InstallMethod {
+	executable, err := executablePath()
+	if err != nil {
+		return InstallOther
+	}
+
+	return DetectInstall(executable, npmGlobalRoots(executable))
+}
+
+// runningExecutable is the running binary's path with symlinks resolved.
+func runningExecutable() (string, error) {
 	executable, err := os.Executable()
 	if err != nil {
-		return InstallOther
+		return "", err
 	}
 
-	resolved, err := filepath.EvalSymlinks(executable)
-	if err != nil {
-		return InstallOther
-	}
-
-	return DetectInstall(resolved, npmGlobalRoots(resolved))
+	return filepath.EvalSymlinks(executable)
 }
 
 // npmGlobalRoots works npm's global folder out from the binary's own path: the

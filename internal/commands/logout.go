@@ -32,6 +32,13 @@ func newLogoutCommand() *cobra.Command {
 				name = opts.profile
 			}
 
+			// Inside an instance the CLI signs in with the instance's own key,
+			// which is not this command's to remove.
+			if _, isInstance := config.InstanceKey(); name == "" && isInstance {
+				ctx.Log("This instance signs in automatically.")
+				return nil
+			}
+
 			if _, exists := cfg.Profiles.Get(name); name == "" || !exists {
 				return errs.New("Not logged in.")
 			}
