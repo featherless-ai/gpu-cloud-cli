@@ -18,6 +18,9 @@ const (
 	KindRetryable
 	KindRateLimit
 	KindServiceUnavailable
+	// KindUsage is a command line that doesn't parse: an unknown command or
+	// option, a missing argument or an invalid choice.
+	KindUsage
 )
 
 type Error struct {
@@ -66,6 +69,12 @@ func RateLimit(message string) error {
 func ServiceUnavailable(message string) error {
 	return &Error{Kind: KindServiceUnavailable, Message: orDefault(message, "Service unavailable")}
 }
+
+// Usage reports a command line that doesn't parse. It prints as
+// "error: <message>" on stderr even with --json, as the TypeScript CLI did.
+func Usage(message string) error { return &Error{Kind: KindUsage, Message: message} }
+
+func Usagef(format string, args ...any) error { return Usage(fmt.Sprintf(format, args...)) }
 
 func orDefault(message, fallback string) string {
 	if message == "" {

@@ -36,10 +36,23 @@ func run(args []string) int {
 	}
 
 	message := errs.Describe(err)
+
+	if errs.IsKind(err, errs.KindUsage) {
+		fmt.Fprintf(os.Stderr, "error: %s\n", message)
+		return 1
+	}
+
 	wantsJSON, _ := root.PersistentFlags().GetBool("json")
 
-	// A parse error stops before flags are read, so look at the words too.
-	if wantsJSON || slices.Contains(args, "--json") {
+	// A parse error stops before flags are read, so look at the words too,
+	// but not past "--", where they belong to the remote command.
+	options := args
+
+	if end := slices.Index(args, "--"); end >= 0 {
+		options = args[:end]
+	}
+
+	if wantsJSON || slices.Contains(options, "--json") {
 		fmt.Println(output.EncodeJSON(map[string]string{"error": message}, false))
 	} else {
 		fmt.Fprintf(os.Stderr, "Error: %s\n", message)

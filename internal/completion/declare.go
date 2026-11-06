@@ -70,7 +70,7 @@ type choiceValue struct {
 
 func (v choiceValue) Set(value string) error {
 	if !slices.Contains(v.choices, value) {
-		return errs.New(allowedChoices(v.choices))
+		return errs.Usage(allowedChoices(v.choices))
 	}
 
 	return v.Value.Set(value)
@@ -97,7 +97,7 @@ func Args(cmd *cobra.Command, args ...Arg) {
 			isAllowed := !found || arg.Choices == nil || slices.Contains(arg.Choices, value)
 
 			if !isAllowed {
-				return errs.Newf(
+				return errs.Usagef(
 					"command-argument value '%s' is invalid for argument '%s'. %s",
 					value, arg.Name, allowedChoices(arg.Choices),
 				)
