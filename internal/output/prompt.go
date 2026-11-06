@@ -7,6 +7,9 @@ import (
 
 	"github.com/charmbracelet/huh"
 	"golang.org/x/term"
+
+	// Before Bubble Tea starts, so it never queries the terminal.
+	_ "featherless.ai/featherless-cloud/internal/output/terminalquery"
 )
 
 func stdoutWidth() int {
@@ -44,13 +47,28 @@ type huhPrompter struct {
 // newForm wraps one field. Without a terminal width (a pty that reports no
 // size) the prompt library would size its fields from 0 and crash drawing them.
 func newForm(field huh.Field, terminalWidth int) *huh.Form {
-	form := huh.NewForm(huh.NewGroup(field)).WithShowHelp(false)
+	form := huh.NewForm(huh.NewGroup(field)).WithShowHelp(false).WithTheme(promptTheme())
 
 	if terminalWidth <= 0 {
 		form = form.WithWidth(80)
 	}
 
 	return form
+}
+
+// promptTheme draws prompts in the terminal's own colours, which need no
+// background colour and read on light and dark terminals alike. Text stays in
+// the terminal's default colour, as the TypeScript CLI's prompts did.
+func promptTheme() *huh.Theme {
+	theme := huh.ThemeBase16()
+
+	for _, styles := range []*huh.FieldStyles{&theme.Focused, &theme.Blurred} {
+		styles.Option = styles.Option.UnsetForeground()
+		styles.UnselectedOption = styles.UnselectedOption.UnsetForeground()
+		styles.TextInput.Text = styles.TextInput.Text.UnsetForeground()
+	}
+
+	return theme
 }
 
 func (p huhPrompter) run(field huh.Field) error {

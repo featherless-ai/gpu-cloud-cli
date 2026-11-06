@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"syscall"
 	"testing"
@@ -23,6 +24,40 @@ func TestMain(m *testing.M) {
 	}
 
 	os.Exit(m.Run())
+}
+
+// The TypeScript CLI never asked the terminal anything. A terminal that doesn't
+// answer a colour query, such as one a test harness or an editor provides, must
+// not hold the CLI up, and no query may be left behind for the shell to print.
+func TestStartsAtATerminalWithoutQueryingIt(t *testing.T) {
+	scriptPath, err := exec.LookPath("script")
+	if err != nil {
+		t.Skip("script(1) runs the CLI at a terminal; it is not installed")
+	}
+
+	// script gives the CLI a terminal and passes its output through without answering queries.
+	args := []string{"-q", "-e", "-c", fmt.Sprintf("'%s' --version", os.Args[0]), "/dev/null"}
+	if runtime.GOOS == "darwin" {
+		args = []string{"-q", "/dev/null", os.Args[0], "--version"}
+	}
+
+	cmd := exec.Command(scriptPath, args...)
+	cmd.Env = append(os.Environ(), "FEATHERLESS_CLOUD_TEST_AS_CLI=1", "HOME="+t.TempDir(), "TERM=xterm-256color")
+	started := time.Now()
+	output, err := cmd.CombinedOutput()
+	elapsed := time.Since(started)
+
+	if err != nil {
+		t.Fatalf("%v: %q", err, output)
+	}
+
+	if strings.Contains(string(output), "\x1b]11;") {
+		t.Errorf("the CLI asked the terminal for its background colour: %q", output)
+	}
+
+	if elapsed > 2*time.Second {
+		t.Errorf("--version took %s at a terminal that answers nothing", elapsed.Round(time.Millisecond))
+	}
 }
 
 const instanceJSON = `{"id":"6f1c2d3e-4a5b-4c6d-8e7f-901a2b3c4d5e","shortId":"bcdfghjkmn","name":"ticker","computeLabel":"2 vCPU","computeType":"cpu","gpuCount":0,"state":"running","startupStage":null,"costMicrosPerHour":"1","ephemeralDiskGiB":20,"createdAt":"2026-11-06T00:00:00.000Z"}`
