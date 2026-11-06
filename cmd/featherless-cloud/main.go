@@ -7,6 +7,9 @@ import (
 	"slices"
 	"syscall"
 
+	// Public CA certificates for images that ship none, used only then.
+	_ "golang.org/x/crypto/x509roots/fallback"
+
 	"featherless.ai/featherless-cloud/internal/commands"
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/errs"

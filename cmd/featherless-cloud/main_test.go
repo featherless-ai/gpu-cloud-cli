@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"crypto/x509"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -21,6 +23,17 @@ func TestMain(m *testing.M) {
 	if os.Getenv("FEATHERLESS_CLOUD_TEST_AS_CLI") == "1" {
 		main()
 		return
+	}
+
+	if os.Getenv("FEATHERLESS_CLOUD_TEST_ROOTS") == "1" {
+		pool, err := x509.SystemCertPool()
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
+
+		fmt.Println(len(pool.Subjects()))
+		os.Exit(0)
 	}
 
 	os.Exit(m.Run())
@@ -57,6 +70,27 @@ func TestStartsAtATerminalWithoutQueryingIt(t *testing.T) {
 
 	if elapsed > 2*time.Second {
 		t.Errorf("--version took %s at a terminal that answers nothing", elapsed.Round(time.Millisecond))
+	}
+}
+
+// Many instance images, plain ubuntu among them, ship no CA certificates. The
+// CLI must still trust the API's and npm's certificates there.
+func TestTrustsPublicCertificatesInAnImageWithoutAny(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("only Linux reads CA certificates from files")
+	}
+
+	cmd := exec.Command(os.Args[0])
+	cmd.Env = append(os.Environ(), "FEATHERLESS_CLOUD_TEST_ROOTS=1", "SSL_CERT_FILE=/nonexistent", "SSL_CERT_DIR=/nonexistent")
+	output, err := cmd.CombinedOutput()
+
+	if err != nil {
+		t.Fatalf("no certificates to trust: %s", output)
+	}
+
+	count, _ := strconv.Atoi(strings.TrimSpace(string(output)))
+	if count < 100 {
+		t.Errorf("trusts %d certificates, want the public CAs", count)
 	}
 }
 
