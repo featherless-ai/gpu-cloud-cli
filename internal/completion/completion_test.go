@@ -302,6 +302,28 @@ func TestDeclareAppliesDefaultsParsingAndChoices(t *testing.T) {
 	}
 }
 
+func TestDeclareRejectsArgumentsOutsideTheirChoicesAndKeepsTheCommandsOwnCheck(t *testing.T) {
+	cmd := newCommand("completion")
+
+	cmd.Args = cobra.ExactArgs(1)
+	Args(cmd, Arg{Name: "shell", Choices: []string{"bash", "zsh"}})
+
+	if err := cmd.ValidateArgs([]string{"bash"}); err != nil {
+		t.Errorf("bash: err = %v, want none", err)
+	}
+
+	rejected := cmd.ValidateArgs([]string{"fish"})
+	want := "command-argument value 'fish' is invalid for argument 'shell'. Allowed choices are bash, zsh."
+
+	if rejected == nil || rejected.Error() != want {
+		t.Errorf("fish: err = %v, want %q", rejected, want)
+	}
+
+	if err := cmd.ValidateArgs([]string{}); err == nil {
+		t.Error("no argument: err = nil, want the command's own ExactArgs error")
+	}
+}
+
 func TestDeclareRegistersEachCompleterOnTheFlagOrArgumentItDefines(t *testing.T) {
 	program := newCommand("x")
 
