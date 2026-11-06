@@ -13,12 +13,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -329,10 +331,37 @@ func runInstaller(stdout io.Writer, retry string, name string, args ...string) e
 
 	var exitErr *exec.ExitError
 	if errors.As(err, &exitErr) {
-		return errs.Newf("%s exited with code %d. Run: %s", name, exitErr.ExitCode(), retry)
+		// Node reported a child a signal stopped as exiting with code null.
+		code := "null"
+		if exitErr.ExitCode() >= 0 {
+			code = strconv.Itoa(exitErr.ExitCode())
+		}
+
+		return errs.Newf("%s exited with code %s. Run: %s", name, code, retry)
 	}
 
-	return errs.Newf("Could not run %s: %s. Run: %s", name, err.Error(), retry)
+	return errs.Newf("Could not run %s: %s. Run: %s", name, spawnError(name, err), retry)
+}
+
+// spawnError words a failed start as Node's spawn did, which the TypeScript CLI
+// passed on: a name on PATH that isn't executable is EACCES, a missing one ENOENT.
+func spawnError(name string, err error) string {
+	if errors.Is(err, fs.ErrPermission) {
+		return "spawn " + name + " EACCES"
+	}
+
+	if !errors.Is(err, exec.ErrNotFound) {
+		return err.Error()
+	}
+
+	for _, dir := range filepath.SplitList(os.Getenv("PATH")) {
+		info, statErr := os.Stat(filepath.Join(dir, name))
+		if statErr == nil && !info.IsDir() {
+			return "spawn " + name + " EACCES"
+		}
+	}
+
+	return "spawn " + name + " ENOENT"
 }
 
 // platformPackage is the npm package holding the binary for goos and goarch.

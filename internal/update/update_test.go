@@ -661,6 +661,49 @@ func TestUpgradeTellsHowToRunBrewWhenItFails(t *testing.T) {
 	}
 }
 
+// The TypeScript CLI passed on Node's spawn error, which names npm and the errno.
+func TestUpgradeSaysNpmCouldNotBeSpawnedTheWayNodeDid(t *testing.T) {
+	notExecutable := t.TempDir()
+	if err := os.WriteFile(filepath.Join(notExecutable, "npm"), []byte("#!/bin/sh\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		path string
+		want string
+	}{
+		{"missing", t.TempDir(), "Could not run npm: spawn npm ENOENT. Run: npm install --global @featherlessai/gpu-cloud-cli@0.2.0"},
+		{"not executable", notExecutable, "Could not run npm: spawn npm EACCES. Run: npm install --global @featherlessai/gpu-cloud-cli@0.2.0"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("PATH", c.path)
+
+			err := Upgrade(context.Background(), InstallNpmGlobal, "0.2.0", io.Discard)
+			if err == nil || err.Error() != c.want {
+				t.Errorf("err = %v, want %q", err, c.want)
+			}
+		})
+	}
+}
+
+func TestUpgradeSaysNpmExitedWithCodeNullWhenASignalStoppedIt(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "npm"), []byte("#!/bin/sh\nkill -TERM $$\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", dir+":/bin:/usr/bin")
+
+	err := Upgrade(context.Background(), InstallNpmGlobal, "0.2.0", io.Discard)
+
+	want := "npm exited with code null. Run: npm install --global @featherlessai/gpu-cloud-cli@0.2.0"
+	if err == nil || err.Error() != want {
+		t.Errorf("err = %v, want %q", err, want)
+	}
+}
+
 type answerPrompter struct {
 	output.Prompter
 	answer   bool
