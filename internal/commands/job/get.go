@@ -148,7 +148,7 @@ func newGetCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "id", Complete: shared.Jobs})
+	completion.Args(cmd, completion.Arg{Name: "id", Description: "Run Job short id", Complete: shared.Jobs})
 	shared.Option(cmd, &opts.profile, "--profile <name>", "", "profile to use")
 	completion.Flag(cmd, "profile", shared.Profiles)
 

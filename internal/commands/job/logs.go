@@ -198,7 +198,7 @@ func newLogsCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "id", Complete: shared.Jobs})
+	completion.Args(cmd, completion.Arg{Name: "id", Description: "Run Job short id", Complete: shared.Jobs})
 	shared.Switch(cmd, &opts.head, "--head", "show the captured beginning instead of recent output")
 	shared.Option(cmd, &opts.tail, "--tail <n>", "500", "lines of history (1-5000)")
 	shared.Switch(cmd, &opts.follow, "--follow", "keep streaming until the Run Job ends")

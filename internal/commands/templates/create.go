@@ -64,7 +64,7 @@ func newCreateCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "name"})
+	completion.Args(cmd, completion.Arg{Name: "name", Description: "lowercase letters, numbers and hyphens; what you launch it by"})
 	withTemplateFlags(cmd, &flags)
 	shared.Option(cmd, &opts.profile, "--profile <name>", "", "profile to use")
 	completion.Flag(cmd, "profile", shared.Profiles)

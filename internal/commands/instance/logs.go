@@ -166,7 +166,7 @@ func newLogsCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "id", Complete: shared.Instances})
+	completion.Args(cmd, completion.Arg{Name: "id", Description: "instance name or short id", Complete: shared.Instances})
 	shared.Switch(cmd, &opts.head, "--head", "show the captured beginning instead of recent output")
 	shared.Option(cmd, &opts.tail, "--tail <n>", "500", "lines of history (1-5000)")
 	shared.Switch(cmd, &opts.follow, "--follow", "keep streaming new lines")

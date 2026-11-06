@@ -112,7 +112,7 @@ func newAddCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "name"})
+	completion.Args(cmd, completion.Arg{Name: "name", Description: "name to pass with --registry"})
 	shared.Option(cmd, &opts.server, "--server <host>", "", "registry host, e.g. docker.io or ghcr.io")
 	shared.Option(cmd, &opts.username, "--username <user>", "", "registry username")
 	shared.Switch(cmd, &opts.passwordStdin, "--password-stdin", "read the password or access token from stdin")

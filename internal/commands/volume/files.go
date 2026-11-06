@@ -1511,7 +1511,7 @@ func newLsCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "path", Complete: Paths})
+	completion.Args(cmd, completion.Arg{Name: "path", Description: "vol://<volume>/<path> folder", Complete: Paths})
 	shared.Switch(cmd, &opts.humanReadable, "-h, --human-readable", "sizes like 1.5 KiB and 100.0 MiB instead of bytes")
 	shared.Switch(cmd, &opts.recursive, "-r, --recursive", "list everything below the folder, by path from the volume root")
 	shared.Switch(cmd, &opts.summarize, "--summarize", "end with the number of files and their total size")
@@ -1783,13 +1783,13 @@ func newFindCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "path", Complete: Paths})
+	completion.Args(cmd, completion.Arg{Name: "path", Description: "vol://<volume>/<path> folder to search", Complete: Paths})
 	shared.Option(cmd, &opts.name, "--name <pattern>", "", `names matching a pattern like "*.safetensors": * matches any characters, ? one, [abc] one of those`)
 	shared.Option(cmd, &opts.iname, "--iname <pattern>", "", "like --name, ignoring case")
 	shared.Option(cmd, &opts.kind, "--type <f|d>", "", "only files (f) or only folders (d)")
 	completion.Choices(cmd, "type", "f", "d")
 	shared.Option(cmd, &opts.maxdepth, "--maxdepth <n>", "", "how many levels below the folder to look")
-	shared.Repeatable(cmd, &opts.size, "--size <+n|-n>", "more (+) or less (-) than a size like 10G or 512K; repeat for a range")
+	shared.Collect(cmd, &opts.size, "--size <+n|-n>", "more (+) or less (-) than a size like 10G or 512K; repeat for a range")
 	shared.Option(cmd, &opts.newerThan, "--newer-than <age>", "", "modified within an age like 30m, 12h or 7d")
 	shared.Option(cmd, &opts.olderThan, "--older-than <age>", "", "modified longer ago than an age like 30m, 12h or 7d")
 	shared.Switch(cmd, &opts.long, "-l, --long", "print each with its modification time and size, like ls")
@@ -1872,7 +1872,7 @@ func newMkdirCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "paths", Variadic: true, Complete: Paths})
+	completion.Args(cmd, completion.Arg{Name: "paths", Description: "vol:// folders to create", Variadic: true, Complete: Paths})
 	shared.Switch(cmd, &opts.parents, "-p, --parents", "create missing parent folders")
 	shared.Option(cmd, &opts.profile, "--profile <name>", "", "profile to use")
 	completion.Flag(cmd, "profile", shared.Profiles)
@@ -1945,7 +1945,7 @@ func newRmCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "paths", Variadic: true, Complete: Paths})
+	completion.Args(cmd, completion.Arg{Name: "paths", Description: "vol:// files or folders", Variadic: true, Complete: Paths})
 	shared.Switch(cmd, &opts.recursive, "-r, --recursive", "delete folders and everything in them")
 	shared.Switch(cmd, &opts.yes, "--yes", "skip confirmation")
 	shared.Option(cmd, &opts.profile, "--profile <name>", "", "profile to use")
@@ -2037,7 +2037,8 @@ func newCpCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "paths", Variadic: true, Complete: Paths})
+	completion.Args(cmd, completion.Arg{Name: "paths", Description: "sources, then the destination: local or vol:// paths", Variadic: true, Complete: Paths})
+	shared.Usage(cmd, "[options] <sources...> <destination>")
 	shared.Switch(cmd, &opts.recursive, "-r, --recursive", "copy folders and everything in them")
 	shared.Switch(cmd, &opts.overwrite, "--overwrite", "replace files that already exist at the destination")
 	shared.Switch(cmd, &opts.update, "--update", "skip files whose size and modification time already match")
@@ -2121,7 +2122,8 @@ func newMvCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "paths", Variadic: true, Complete: Paths})
+	completion.Args(cmd, completion.Arg{Name: "paths", Description: "sources, then the destination: local or vol:// paths", Variadic: true, Complete: Paths})
+	shared.Usage(cmd, "[options] <sources...> <destination>")
 	shared.Switch(cmd, &opts.overwrite, "--overwrite", "replace files at the destination")
 	shared.Option(cmd, &opts.concurrency, "--concurrency <n>", "16", "files at a time, 1 to 32")
 	shared.Switch(cmd, &opts.verbose, "-v, --verbose", "print each file as it is moved")

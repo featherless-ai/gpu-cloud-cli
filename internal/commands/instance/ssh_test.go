@@ -488,6 +488,9 @@ func TestRegistersShellSSHAndTmuxWithHelpAndCompletionOptions(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The root lays help out; the text below it belongs to the command.
+	help.WriteString(shared.HelpAfterText(tmux))
+
 	for _, want := range []string{"default: default", "-i, --identity <file>", "default socket", "Ctrl-b d", "stop/restart/replacement"} {
 		if !strings.Contains(help.String(), want) {
 			t.Errorf("tmux help does not contain %q:\n%s", want, help.String())

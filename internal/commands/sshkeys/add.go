@@ -127,7 +127,7 @@ func newAddCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "file"})
+	completion.Args(cmd, completion.Arg{Name: "file", Description: "public key file (default: ~/.ssh/id_ed25519.pub, id_ecdsa.pub or id_rsa.pub)"})
 	shared.Option(cmd, &opts.name, "--name <name>", "", "key name (default: the key comment, or this computer's name)")
 	shared.Option(cmd, &opts.profile, "--profile <name>", "", "profile to use")
 	completion.Flag(cmd, "profile", shared.Profiles)

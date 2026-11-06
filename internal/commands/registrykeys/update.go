@@ -91,7 +91,7 @@ func newUpdateCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "key", Complete: shared.Registries})
+	completion.Args(cmd, completion.Arg{Name: "key", Description: "registry key name or id", Complete: shared.Registries})
 	shared.Option(cmd, &opts.name, "--name <name>", "", "new name")
 	shared.Option(cmd, &opts.server, "--server <host>", "", "new registry host")
 	shared.Option(cmd, &opts.username, "--username <user>", "", "new registry username")

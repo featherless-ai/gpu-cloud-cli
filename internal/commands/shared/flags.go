@@ -1,7 +1,7 @@
 package shared
 
 import (
-	"fmt"
+	"encoding/json"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -18,10 +18,26 @@ func Option(cmd *cobra.Command, target *string, spec, value, usage string) {
 	flags := cmd.Flags()
 	flags.SortFlags = false
 	flags.VarP(&textValue{target: target, placeholder: placeholder}, name, shorthand, usage)
+
+	if value != "" {
+		encoded, _ := json.Marshal(value)
+		_ = flags.SetAnnotation(name, defaultAnnotation, []string{string(encoded)})
+	}
 }
 
 // Repeatable adds a flag that collects every value given, in order: "--env <K=V>".
 func Repeatable(cmd *cobra.Command, target *[]string, spec, usage string) {
+	name, shorthand, placeholder := parseSpec(spec)
+	*target = []string{}
+	flags := cmd.Flags()
+	flags.SortFlags = false
+	flags.VarP(&listValue{target: target, placeholder: placeholder}, name, shorthand, usage)
+	_ = flags.SetAnnotation(name, defaultAnnotation, []string{"[]"})
+}
+
+// Collect is Repeatable for a flag the TypeScript CLI declared without a
+// default, so help shows none: "--size <+n|-n>".
+func Collect(cmd *cobra.Command, target *[]string, spec, usage string) {
 	name, shorthand, placeholder := parseSpec(spec)
 	*target = []string{}
 	flags := cmd.Flags()
@@ -37,18 +53,49 @@ func Switch(cmd *cobra.Command, target *bool, spec, usage string) {
 	flags.BoolVarP(target, name, shorthand, false, usage)
 }
 
+// What help shows beyond a command's flags and arguments.
+const (
+	defaultAnnotation   = "featherless-cloud/default"
+	usageAnnotation     = "featherless-cloud/usage"
+	helpAfterAnnotation = "featherless-cloud/help-after"
+)
+
 // HelpAfter prints text below the command's help.
 func HelpAfter(cmd *cobra.Command, text string) {
-	cmd.SetHelpFunc(func(c *cobra.Command, args []string) {
-		help := (&cobra.Command{}).HelpFunc()
+	annotate(cmd, helpAfterAnnotation, text)
+}
 
-		if c.HasParent() {
-			help = c.Parent().HelpFunc()
-		}
+// HelpAfterText is the text HelpAfter put below cmd's help.
+func HelpAfterText(cmd *cobra.Command) string {
+	return cmd.Annotations[helpAfterAnnotation]
+}
 
-		help(c, args)
-		fmt.Fprintln(c.OutOrStdout(), text)
-	})
+// Usage replaces what help shows after the command's name, e.g.
+// "[options] <sources...> <destination>" for arguments read as a list.
+func Usage(cmd *cobra.Command, text string) {
+	annotate(cmd, usageAnnotation, text)
+}
+
+// UsageText is the usage Usage set for cmd, if any.
+func UsageText(cmd *cobra.Command) string {
+	return cmd.Annotations[usageAnnotation]
+}
+
+// DefaultText is a flag's default as help shows it: "20", [] or nothing.
+func DefaultText(flag *pflag.Flag) string {
+	if values := flag.Annotations[defaultAnnotation]; len(values) > 0 {
+		return values[0]
+	}
+
+	return ""
+}
+
+func annotate(cmd *cobra.Command, key, value string) {
+	if cmd.Annotations == nil {
+		cmd.Annotations = map[string]string{}
+	}
+
+	cmd.Annotations[key] = value
 }
 
 // Arguments checks a command line in commander's order and words: required

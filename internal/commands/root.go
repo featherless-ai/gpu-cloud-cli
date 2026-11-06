@@ -71,6 +71,10 @@ func NewRoot() *cobra.Command {
 	)
 
 	parseLikeCommander(root)
+	root.SetHelpFunc(func(cmd *cobra.Command, _ []string) {
+		printHelp(cmd, cmd.OutOrStdout())
+	})
+	root.SetHelpCommand(newHelpCommand(root))
 
 	return root
 }

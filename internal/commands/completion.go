@@ -27,7 +27,7 @@ func newCompletionCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "shell", Choices: []string{"bash", "zsh"}})
+	completion.Args(cmd, completion.Arg{Name: "shell", Description: "bash or zsh", Choices: []string{"bash", "zsh"}})
 
 	return cmd
 }

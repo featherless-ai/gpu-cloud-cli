@@ -1507,7 +1507,8 @@ func newSyncCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "local-folder"}, completion.Arg{Name: "remote-folder", Complete: Paths})
+	completion.Args(cmd, completion.Arg{Name: "local-folder", Description: "folder on this computer"}, completion.Arg{Name: "remote-folder", Description: "vol://<volume>/<path> folder in the volume", Complete: Paths})
+	shared.Usage(cmd, "[options] <local-folder> <vol://<volume>/<path>")
 	shared.Option(cmd, &opts.mode, "--mode <mode>", "both", "upload, download or both")
 	shared.Switch(cmd, &opts.dryRun, "--dry-run", "show what would be sent, received and created")
 	shared.Switch(cmd, &opts.mkdirs, "--mkdirs", "create missing folders on either side")

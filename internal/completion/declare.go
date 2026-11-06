@@ -33,10 +33,11 @@ type Completer func(word string, ctx *Context) ([]string, error)
 
 // Arg declares a positional argument for help and completion.
 type Arg struct {
-	Name     string
-	Variadic bool
-	Complete Completer
-	Choices  []string
+	Name        string
+	Description string
+	Variadic    bool
+	Complete    Completer
+	Choices     []string
 }
 
 var (

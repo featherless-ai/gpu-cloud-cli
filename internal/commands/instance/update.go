@@ -169,7 +169,7 @@ func newUpdateCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "id", Complete: shared.Instances})
+	completion.Args(cmd, completion.Arg{Name: "id", Description: "instance name or short id", Complete: shared.Instances})
 	shared.Option(cmd, &opts.name, "--name <name>", "", "rename the instance")
 	shared.Option(cmd, &opts.image, "--image <reference>", "", "container image (requires stopped state)")
 	shared.Option(cmd, &opts.registry, "--registry <name|id|null>", "", "registry credential, or \"null\" for public pulls")

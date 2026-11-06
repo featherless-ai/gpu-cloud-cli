@@ -66,7 +66,7 @@ func newDeleteCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "key", Complete: shared.Registries})
+	completion.Args(cmd, completion.Arg{Name: "key", Description: "registry key name or id", Complete: shared.Registries})
 	shared.Switch(cmd, &opts.yes, "--yes", "skip confirmation")
 	shared.Option(cmd, &opts.profile, "--profile <name>", "", "profile to use")
 	completion.Flag(cmd, "profile", shared.Profiles)

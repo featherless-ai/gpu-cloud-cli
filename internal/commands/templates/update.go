@@ -80,7 +80,7 @@ func newUpdateCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "template", Complete: shared.Templates})
+	completion.Args(cmd, completion.Arg{Name: "template", Description: "template name or id", Complete: shared.Templates})
 	shared.Option(cmd, &opts.name, "--name <name>", "", "new name")
 	withTemplateFlags(cmd, &flags)
 	shared.Option(cmd, &opts.profile, "--profile <name>", "", "profile to use")

@@ -80,7 +80,7 @@ func newUpdateCommand() *cobra.Command {
 		},
 	}
 
-	completion.Args(cmd, completion.Arg{Name: "id", Complete: shared.Volumes})
+	completion.Args(cmd, completion.Arg{Name: "id", Description: "volume name or id", Complete: shared.Volumes})
 	shared.Option(cmd, &opts.name, "--name <new>", "", "new volume name")
 	shared.Option(cmd, &opts.gb, "--gb <n>", "", "new capacity in GB (grow-only, 10-10240)")
 	shared.Option(cmd, &opts.profile, "--profile <name>", "", "profile to use")
