@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -160,6 +161,113 @@ func TestIsGlobalNpmInstallRefusesNpxCachesProjectInstallsAndOtherPackages(t *te
 		if IsGlobalNpmInstall(executable, npmGlobalRoot) {
 			t.Errorf("IsGlobalNpmInstall(%q) = true, want false", executable)
 		}
+	}
+}
+
+// Go-only: npm's global folder worked out from where the binary sits.
+
+// installBinary lays out the binary as npm installs the package into
+// base/node_modules, and returns its path.
+func installBinary(t *testing.T, base string) string {
+	t.Helper()
+	platformPackage := filepath.Join(
+		base, "node_modules", "@featherlessai", "gpu-cloud-cli",
+		"node_modules", "@featherlessai", "gpu-cloud-cli-linux-x64",
+	)
+	binary := filepath.Join(platformPackage, "bin", "featherless-cloud")
+
+	if err := os.MkdirAll(filepath.Dir(binary), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(binary, nil, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	return binary
+}
+
+// linkCommand adds the command link npm puts in a global prefix.
+func linkCommand(t *testing.T, prefix, binary string) {
+	t.Helper()
+	link := filepath.Join(prefix, "bin", "featherless-cloud")
+
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.Symlink(binary, link); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func realTempDir(t *testing.T) string {
+	t.Helper()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	return dir
+}
+
+func unsetNpmPrefix(t *testing.T) {
+	t.Helper()
+	t.Setenv("npm_config_prefix", "")
+	os.Unsetenv("npm_config_prefix")
+}
+
+func TestDetectInstallFindsNpmsGlobalFolderFromTheBinarysPath(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("npm's Unix layout")
+	}
+
+	unsetNpmPrefix(t)
+	linked := realTempDir(t)
+	linkedBinary := installBinary(t, filepath.Join(linked, "lib"))
+	linkCommand(t, linked, linkedBinary)
+	linkedMethod := DetectInstall(linkedBinary, npmGlobalRoots(linkedBinary))
+
+	if linkedMethod != InstallNpmGlobal {
+		t.Errorf("with npm's command link: got %q, want %q", linkedMethod, InstallNpmGlobal)
+	}
+
+	configured := realTempDir(t)
+	configuredBinary := installBinary(t, filepath.Join(configured, "lib"))
+	t.Setenv("npm_config_prefix", configured)
+	configuredMethod := DetectInstall(configuredBinary, npmGlobalRoots(configuredBinary))
+
+	if configuredMethod != InstallNpmGlobal {
+		t.Errorf("under npm_config_prefix: got %q, want %q", configuredMethod, InstallNpmGlobal)
+	}
+}
+
+func TestDetectInstallRefusesProjectInstallsNpxCachesAndAnotherNpmPrefix(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("npm's Unix layout")
+	}
+
+	unsetNpmPrefix(t)
+	home := realTempDir(t)
+	project := installBinary(t, filepath.Join(home, "work", "app"))
+	npx := installBinary(t, filepath.Join(home, ".npm", "_npx", "abc"))
+	unlinked := installBinary(t, filepath.Join(home, "unlinked", "lib"))
+
+	for _, binary := range []string{project, npx, unlinked} {
+		method := DetectInstall(binary, npmGlobalRoots(binary))
+
+		if method != InstallOther {
+			t.Errorf("DetectInstall(%q) = %q, want %q", binary, method, InstallOther)
+		}
+	}
+
+	elsewhere := installBinary(t, filepath.Join(home, "elsewhere", "lib"))
+	linkCommand(t, filepath.Join(home, "elsewhere"), elsewhere)
+	t.Setenv("npm_config_prefix", realTempDir(t))
+	elsewhereMethod := DetectInstall(elsewhere, npmGlobalRoots(elsewhere))
+
+	if elsewhereMethod != InstallOther {
+		t.Errorf("outside npm_config_prefix: got %q, want %q", elsewhereMethod, InstallOther)
 	}
 }
 
