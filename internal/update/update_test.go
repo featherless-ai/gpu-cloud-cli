@@ -331,3 +331,20 @@ func TestFetchLatestVersionRejectsAMalformedIndex(t *testing.T) {
 		t.Errorf("err = %q, want %q", err.Error(), want)
 	}
 }
+
+func TestFetchLatestVersionReportsAnUnreachableRegistry(t *testing.T) {
+	server := httptest.NewServer(http.NotFoundHandler())
+	unreachable := server.URL
+	server.Close()
+	swap(t, &registryBase, unreachable)
+
+	_, err := FetchLatestVersion(context.Background())
+	if err == nil {
+		t.Fatal("FetchLatestVersion succeeded, want an error")
+	}
+
+	want := "Could not reach the npm registry."
+	if err.Error() != want {
+		t.Errorf("err = %q, want %q", err.Error(), want)
+	}
+}

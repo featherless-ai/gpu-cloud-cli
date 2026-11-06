@@ -237,7 +237,7 @@ func FetchLatestVersion(ctx context.Context) (string, error) {
 
 	response, err := http.DefaultClient.Do(request)
 	if err != nil {
-		return "", err
+		return "", errs.New("Could not reach the npm registry.")
 	}
 	defer response.Body.Close()
 
