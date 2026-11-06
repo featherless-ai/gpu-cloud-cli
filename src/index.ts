@@ -8,6 +8,7 @@ import { jobCommand } from './commands/job';
 import { execCommand } from './commands/exec';
 import { sshKeysCommand } from './commands/ssh-keys';
 import { registryKeysCommand } from './commands/registry-keys';
+import { templatesCommand } from './commands/templates';
 import { upgradeCommand } from './commands/upgrade';
 import { completeCommand, completionCommand } from './commands/completion';
 import { offerUpdate, runUpdateCheck } from './update-check';
@@ -51,6 +52,7 @@ program
   .addCommand(execCommand)
   .addCommand(sshKeysCommand)
   .addCommand(registryKeysCommand)
+  .addCommand(templatesCommand)
   .addCommand(upgradeCommand)
   .addCommand(completionCommand)
   .addCommand(completeCommand, { hidden: true })

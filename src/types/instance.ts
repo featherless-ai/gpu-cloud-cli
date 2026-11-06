@@ -62,6 +62,7 @@ export const instanceDtoSchema = z.object({
     name: z.string(),
     image: z.string(),
   }).nullable().optional(),
+  template: z.object({ id: z.string(), shortId: z.string(), name: z.string() }).nullable().optional(),
   image: z.object({
     source: z.enum(['template', 'custom']),
     reference: z.string(),

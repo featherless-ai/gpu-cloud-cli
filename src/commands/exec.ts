@@ -7,16 +7,20 @@ import { CliError, RetryableError } from '../error';
 import type { RunJobDto, RunJobState } from '../types/job';
 import {
   assertInstanceName,
+  findTemplate,
   cpuCores,
   gpuCounts,
   gpuTypes,
+  parseDisk,
   parseRepeatable,
+  parseVolumeFlags,
   profiles,
   randomInstanceName,
   registries,
   resolveCompute,
   resolveImage,
   resolveVolume,
+  templateIds,
   templates,
   toEnvironment,
   validateMounts,
@@ -32,6 +36,8 @@ interface ExecOptions {
   name?: string;
   image?: string;
   template?: string;
+  templateId?: string;
+  templateVersion?: string;
   registry?: string;
   gpuType?: string;
   gpuCount?: string;
@@ -58,18 +64,6 @@ function boundedInteger(value: string, label: string, min: number, max: number):
   }
 
   return parsed;
-}
-
-function parseVolumeFlags(values: string[] | undefined): Array<{ volume: string; mountPath: string }> {
-  return (values ?? []).map((entry) => {
-    const separator = entry.lastIndexOf(':');
-
-    if (separator < 1 || separator === entry.length - 1) {
-      throw new CliError(`--volume expects NAME:PATH, got "${entry}"`);
-    }
-
-    return { volume: entry.slice(0, separator), mountPath: entry.slice(separator + 1) };
-  });
 }
 
 function status(message: string): void {
@@ -207,9 +201,11 @@ export const execCommand = new CliCommand('exec')
   .argument('[command...]')
   .description('Run a command on temporary CPU or GPU compute')
   .option('--name <name>', 'Run Job name (random when omitted)')
-  .option('--template <name|id>', 'published template; defaults to the PyTorch environment', { complete: templates })
-  .option('--image <reference>', 'custom container image instead of a template')
-  .option('--registry <name|id>', 'registry credential for a private --image', { complete: registries })
+  .option('--template <name>', 'template: a name, org/<name>, featherless/<name> or an id; defaults to the PyTorch environment', { complete: templates })
+  .option('--template-id <id>', 'template, by id', { complete: templateIds })
+  .option('--template-version <version>', 'an official template\'s version, e.g. 2.11.0 (or --template name:version); its current one by default')
+  .option('--image <reference>', 'container image to run, or to replace the template\'s')
+  .option('--registry <name|id>', 'registry credential for a private image', { complete: registries })
   .option('--gpu-type <text>', 'GPU model substring, e.g. mi325x', { complete: gpuTypes('run-job') })
   .option('--gpu-count <n>', 'GPUs: 1, 2, 4, or 8', { complete: gpuCounts('run-job') })
   .option('--cpu-cores <n>', 'vCPU cores; mutually exclusive with GPU options', { complete: cpuCores('run-job') })
@@ -227,10 +223,6 @@ export const execCommand = new CliCommand('exec')
   .option('--profile <name>', 'authentication profile to use', { complete: profiles })
   .addHelpText('after', '\nExamples:\n  featherless-cloud exec --gpu-count 1 -- python -c \'import torch; print(torch.cuda.is_available())\'\n  featherless-cloud exec --cpu-cores 32 -- python -c \'import os; print(os.cpu_count())\'')
   .action(async (command: string[], options: ExecOptions, cmd: Command) => {
-    if (command.length === 0) {
-      throw new CliError('Provide the command after --.');
-    }
-
     if (options.cpuCores && (options.gpuCount || options.gpuType)) {
       throw new CliError('--cpu-cores cannot be combined with GPU options.');
     }
@@ -246,18 +238,28 @@ export const execCommand = new CliCommand('exec')
     const name = options.name ?? randomInstanceName();
     assertInstanceName(name);
 
-    const [pricing, templates, volumes, credentials] = await ctx.spin('Loading execution options', () => Promise.all([
+    const [found, pricing, volumes, credentials] = await ctx.spin('Loading execution options', () => Promise.all([
+      findTemplate(client, options),
       client.pricing('run-job'),
-      options.template ? client.templates() : Promise.resolve([]),
       options.volume?.length ? client.listVolumes() : Promise.resolve([]),
-      options.image && options.registry ? client.registryCredentials() : Promise.resolve([]),
+      options.registry ? client.registryCredentials() : Promise.resolve([]),
     ]));
 
-    const image = options.template || options.image || options.registry
-      ? resolveImage(templates, credentials, options)
+    const template = found?.template ?? null;
+
+    if (command.length === 0 && !template?.command.length) {
+      throw new CliError('Provide the command after --.');
+    }
+
+    // Without a template or image the server runs the PyTorch environment.
+    const image = options.image || options.registry
+      ? resolveImage(credentials, options, Boolean(template))
       : {};
 
-    const compute = await resolveCompute(pricing, {
+    // A template's compute stands unless a flag says otherwise.
+    const usesTemplateCompute = Boolean(template?.computeSku) && !options.gpuType && !options.gpuCount && !options.cpuCores;
+
+    const compute = usesTemplateCompute ? {} : await resolveCompute(pricing, {
       computeType: options.cpuCores ? 'cpu' : 'gpu',
       gpuType: options.gpuType,
       gpuCount: options.gpuCount,
@@ -278,10 +280,12 @@ export const execCommand = new CliCommand('exec')
 
     const body: CreateRunJobBody = {
       name,
+      ...(template ? { templateId: template.id } : {}),
+      ...(found?.version ? { templateVersion: found.version } : {}),
       ...image,
       ...compute,
-      command,
-      ephemeralDiskGiB: boundedInteger(options.disk, 'Container disk', 20, 2000),
+      ...(command.length ? { command } : {}),
+      ...(!template || cmd.getOptionValueSource('disk') === 'cli' ? { ephemeralDiskGiB: parseDisk(options.disk) } : {}),
       workingDirectory: options.workdir,
       timeoutSeconds: boundedInteger(options.timeout, 'Timeout', 1, 86_400),
       preemptionRetries: boundedInteger(options.preemptionRetries, 'Preemption retries', 0, 3),

@@ -20,7 +20,7 @@ import {
   type CompletionNode,
 } from '../src/completions';
 import {
-  cpuCores, gpuCounts, gpuTypes, instances, jobs, profiles, registries, templates, volumeMounts, volumes,
+  cpuCores, gpuCounts, gpuTypes, instances, jobs, profiles, registries, templateIds, templates, volumeMounts, volumes,
 } from '../src/commands/shared';
 import { volumePaths } from '../src/commands/volume/files';
 import type { CloudClient } from '../src/clients/cloud';
@@ -28,6 +28,7 @@ import { FilesClient, type FileEntry } from '../src/clients/files';
 import { loadConfig } from '../src/config';
 import { completeCommand, completionCommand } from '../src/commands/completion';
 import { execCommand } from '../src/commands/exec';
+import { templatesCommand } from '../src/commands/templates';
 import { instanceCommand } from '../src/commands/instance';
 import { jobCommand } from '../src/commands/job';
 import { loginCommand } from '../src/commands/login';
@@ -370,13 +371,27 @@ describe('shared completers', () => {
     await expect(volumeMounts('datasets:/w', context)).resolves.toEqual([]);
   });
 
-  it('completes enabled template names and registry credential names', async () => {
+  it('completes what to type for each enabled template, and registry credential names', async () => {
     const context = ctx({
-      templates: async () => [{ name: 'PyTorch', enabled: true }, { name: 'Retired', enabled: false }],
+      templates: async () => [
+        {
+          slug: 'rocm-pytorch', visibility: 'public', official: true, enabled: true, shortId: 'b2c3d4f5g6',
+        },
+        {
+          slug: 'retired', visibility: 'public', official: true, enabled: false, shortId: 'h7j8k9m0n1',
+        },
+        {
+          slug: 'trainer', visibility: 'private', official: false, enabled: true, shortId: 'p2q3r4s5t6',
+        },
+        {
+          slug: 'trainer', visibility: 'organization', official: false, enabled: true, shortId: 'v7w8x9y0z1',
+        },
+      ],
       registryCredentials: async () => [{ name: 'ghcr' }, { name: 'docker-hub' }],
     });
 
-    await expect(templates('', context)).resolves.toEqual(['PyTorch']);
+    await expect(templates('', context)).resolves.toEqual(['rocm-pytorch', 'trainer', 'org/trainer']);
+    await expect(templateIds('p', context)).resolves.toEqual(['p2q3r4s5t6']);
     await expect(registries('g', context)).resolves.toEqual(['ghcr']);
   });
 
@@ -412,6 +427,7 @@ describe('declared completers', () => {
     .addCommand(pricingCommand)
     .addCommand(jobCommand)
     .addCommand(execCommand)
+    .addCommand(templatesCommand)
     .addCommand(completionCommand)
     .addCommand(completeCommand, { hidden: true });
 
@@ -426,6 +442,7 @@ describe('declared completers', () => {
     ...['get', 'logs', 'cancel', 'delete'].map(name => [`job ${name}`, jobs] as const),
     ...['get', 'update', 'delete'].map(name => [`volume ${name}`, volumes] as const),
     ...['ls', 'find', 'mkdir', 'rm', 'cp', 'mv'].map(name => [`volume ${name}`, volumePaths] as const),
+    ...['show', 'update', 'delete'].map(name => [`templates ${name}`, templates] as const),
   ])('%s completes its argument', (command, completer) => {
     expect(argument(command)).toBe(completer);
   });
@@ -433,6 +450,7 @@ describe('declared completers', () => {
   it('completes option values', async () => {
     for (const command of ['instance create', 'exec']) {
       expect(option(command, '--template')).toBe(templates);
+      expect(option(command, '--template-id')).toBe(templateIds);
       expect(option(command, '--registry')).toBe(registries);
       expect(option(command, '--volume')).toBe(volumeMounts);
     }
@@ -472,6 +490,7 @@ describe('declared completers', () => {
     await expect(values(option('volume find', '--type'))).resolves.toEqual(['f', 'd']);
     await expect(values(option('pricing list', '--workload'))).resolves.toEqual(['instance', 'run-job']);
     await expect(values(option('exec', '--preemption-retries'))).resolves.toEqual(['0', '1', '2', '3']);
+    await expect(values(option('templates create', '--visibility'))).resolves.toEqual(['private', 'organization']);
     await expect(values(argument('completion'))).resolves.toEqual(['bash', 'zsh']);
   });
 });

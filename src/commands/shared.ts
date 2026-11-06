@@ -1,7 +1,9 @@
 import * as p from '@clack/prompts';
 import { CliError } from '../error';
 import type { CliContext } from '../context';
-import { computeTypeOf, type PriceRate, type CatalogTemplate } from '../types/pricing';
+import type { Command } from 'commander';
+import { computeTypeOf, type PriceRate } from '../types/pricing';
+import type { Template } from '../types/templates';
 import type { NetworkVolumeDto } from '../types/volume';
 import type { InstanceDto } from '../types/instance';
 import type { CloudClient } from '../clients/cloud';
@@ -313,32 +315,22 @@ export async function selectCompute(prices: PriceRate[], ctx: CliContext): Promi
 }
 
 export interface ImageOptions {
-  template?: string;
   image?: string;
   registry?: string;
 }
 
-export type ImageSelection =
-  | { templateVersionId: string }
-  | { containerImage: string; registryCredentialId?: string };
+export interface ImageFields {
+  containerImage?: string;
+  registryCredentialId?: string;
+}
 
-/** Resolves --template/--image/--registry into the create-body image fields. */
-export function resolveImage(
-  templates: CatalogTemplate[],
-  credentials: RegistryCredential[],
-  opts: ImageOptions,
-): ImageSelection {
-  if (opts.template && opts.image) {
-    throw new CliError('Choose either --template or --image, not both.');
+/** Resolves --image/--registry; with a template they replace its image or registry key. */
+export function resolveImage(credentials: RegistryCredential[], opts: ImageOptions, hasTemplate: boolean): ImageFields {
+  if (opts.registry && !opts.image && !hasTemplate) {
+    throw new CliError('--registry applies only with --image or a template.');
   }
 
-  if (opts.registry && !opts.image) {
-    throw new CliError('--registry applies only with --image.');
-  }
-
-  if (opts.template) {
-    return { templateVersionId: resolveTemplateRef(templates, opts.template) };
-  }
+  const fields: ImageFields = {};
 
   if (opts.image) {
     const reference = opts.image.trim();
@@ -347,26 +339,28 @@ export function resolveImage(
       throw new CliError('Enter a container image.');
     }
 
-    const selection: { containerImage: string; registryCredentialId?: string } = { containerImage: reference };
-
-    if (opts.registry) {
-      selection.registryCredentialId = resolveCredentialRef(credentials, opts.registry);
-    }
-
-    return selection;
+    fields.containerImage = reference;
   }
 
-  throw new CliError('Pass --image or --template.');
+  if (opts.registry) {
+    fields.registryCredentialId = resolveCredentialRef(credentials, opts.registry);
+  }
+
+  if (!hasTemplate && !fields.containerImage) {
+    throw new CliError('Pass --image, --template or --template-id.');
+  }
+
+  return fields;
 }
 
-/** Picks a template interactively when neither --template nor --image was given. */
+/** Picks a template interactively when neither a template nor --image was given. */
 export async function selectImage(
-  templates: CatalogTemplate[],
+  templates: Template[],
   ctx: CliContext,
-): Promise<ImageSelection> {
+): Promise<{ template: Template } | { containerImage: string }> {
   if (templates.length === 0) {
     const image = await p.text({
-      message: 'No templates are published. Enter a container image:',
+      message: 'No templates are available. Enter a container image:',
       validate: value => ((value ?? '').trim().length >= 3 ? undefined : 'Enter a container image.'),
     });
 
@@ -378,49 +372,186 @@ export async function selectImage(
     return { containerImage: String(image).trim() };
   }
 
-  const versionId = await p.select({
+  const id = await p.select({
     message: 'Which template?',
     options: templates.map(template => ({
-      value: template.version.id,
-      label: `${template.name} ${template.version.version}`,
+      value: template.id,
+      label: template.official ? `${template.name} ${template.version.version}` : templateReference(template, templates),
     })),
   });
 
-  if (p.isCancel(versionId)) {
+  if (p.isCancel(id)) {
     ctx.log('Cancelled.');
     process.exit(0);
   }
 
-  return { templateVersionId: versionId as string };
+  return { template: templates.find(template => template.id === id)! };
 }
 
-function resolveTemplateRef(templates: CatalogTemplate[], ref: string): string {
-  if (UUID_PATTERN.test(ref)) {
-    const byId = templates.find(template => template.version.id === ref.toLowerCase());
+const VISIBILITY_ORDER = ['private', 'organization', 'public'] as const;
 
-    if (byId) {
-      return byId.version.id;
-    }
+/**
+ * What to type for a template: its name, qualified only when one closer to you has the
+ * same name. A bare name finds your template, then your organization's, then an official one.
+ */
+export function templateReference(template: Template, templates: Template[]): string {
+  const closer = templates.some(other => other.slug === template.slug
+    && VISIBILITY_ORDER.indexOf(other.visibility) < VISIBILITY_ORDER.indexOf(template.visibility));
+
+  if (!closer) {
+    return template.slug;
   }
 
+  return template.official ? `featherless/${template.slug}` : `org/${template.slug}`;
+}
+
+/** Resolves --template: an id, a name, org/<name>, featherless/<name>, or an official template's display name. */
+export function resolveTemplateRef(templates: Template[], ref: string): Template {
   const needle = ref.toLowerCase();
-  const exact = templates.filter(template => template.name.toLowerCase() === needle);
-  const candidates = exact.length ? exact : templates.filter(template => template.name.toLowerCase().includes(needle));
+  const byId = templates.find(template => template.id === needle || template.shortId === needle || template.version.id === needle);
+
+  if (byId) {
+    return byId;
+  }
+
+  const separator = needle.indexOf('/');
+  const scope = separator > 0 ? needle.slice(0, separator) : undefined;
+  const slug = separator > 0 ? needle.slice(separator + 1) : needle;
+  let match: Template | undefined;
+
+  if (scope === 'org') {
+    match = templates.find(template => template.visibility === 'organization' && template.slug === slug);
+  } else if (scope === 'featherless') {
+    match = templates.find(template => template.official && template.slug === slug);
+  } else {
+    match = VISIBILITY_ORDER
+      .map(visibility => templates.find(template => template.visibility === visibility && template.slug === slug))
+      .find(Boolean);
+  }
+
+  if (match) {
+    return match;
+  }
+
+  // An official template's display name, as `--template pytorch` has always worked.
+  const official = templates.filter(template => template.official);
+  const exact = official.filter(template => template.name.toLowerCase() === needle);
+  const candidates = exact.length ? exact : official.filter(template => template.name.toLowerCase().includes(needle));
 
   if (candidates.length === 1) {
-    return candidates[0]!.version.id;
+    return candidates[0]!;
   }
 
   if (candidates.length > 1) {
-    const names = candidates.map(template => template.name).join(', ');
+    const names = candidates.map(template => templateReference(template, templates)).join(', ');
     throw new CliError(`Multiple templates match "${ref}" (${names}). Be more specific.`);
   }
 
-  throw new CliError(`No template matching "${ref}". Run featherless-cloud instance create --help for examples.`);
+  throw new CliError(`No template matching "${ref}". List them with featherless-cloud templates list.`);
 }
 
-export const templates: Completer = async (word, ctx) =>
-  (await (await ctx.cloud()).templates()).filter(template => template.enabled).map(template => template.name).filter(startsWith(word));
+/** The template --template or --template-id names, if either was given. */
+/** `featherless/rocm-pytorch:2.11.0` names an official template's version; template names never hold a colon. */
+export function splitTemplateVersion(ref: string): { ref: string; version?: string } {
+  const separator = ref.indexOf(':');
+  return separator > 0 ? { ref: ref.slice(0, separator), version: ref.slice(separator + 1) } : { ref };
+}
+
+/** A version must be one the official template lists. */
+export function checkTemplateVersion(template: Template, version: string | undefined): string | undefined {
+  if (!version) {
+    return undefined;
+  }
+
+  if (!template.official) {
+    throw new CliError(`Only official templates have versions, and ${template.name} is not one.`);
+  }
+
+  if (!template.versions.some(entry => entry.version === version)) {
+    throw new CliError(`${template.name} has no version ${version}. Versions: ${template.versions.map(entry => entry.version).join(', ')}.`);
+  }
+
+  return version;
+}
+
+export interface TemplateChoice {
+  template: Template;
+  /** An official version other than the current one. */
+  version?: string;
+}
+
+export async function findTemplate(
+  client: CloudClient,
+  opts: { template?: string; templateId?: string; templateVersion?: string },
+): Promise<TemplateChoice | null> {
+  if (opts.template && opts.templateId) {
+    throw new CliError('Choose either --template or --template-id.');
+  }
+
+  let template: Template | null = null;
+  let version = opts.templateVersion;
+
+  if (opts.templateId) {
+    template = await client.template(opts.templateId);
+  }
+
+  if (opts.template) {
+    const split = splitTemplateVersion(opts.template);
+
+    if (split.version && opts.templateVersion) {
+      throw new CliError('Give the version once: --template name:version or --template-version.');
+    }
+
+    version = split.version ?? version;
+    template = resolveTemplateRef(await client.templates(), split.ref);
+  }
+
+  if (!template) {
+    if (opts.templateVersion) {
+      throw new CliError('--template-version needs --template or --template-id.');
+    }
+
+    return null;
+  }
+
+  return { template, version: checkTemplateVersion(template, version) };
+}
+
+export const templates: Completer = async (word, ctx) => {
+  const usable = (await (await ctx.cloud()).templates()).filter(template => template.enabled);
+  return usable.map(template => templateReference(template, usable)).filter(startsWith(word));
+};
+
+export const templateIds: Completer = async (word, ctx) =>
+  (await (await ctx.cloud()).templates()).map(template => template.shortId).filter(startsWith(word));
+
+export function parseVolumeFlags(values: string[] | undefined): Array<{ volume: string; mountPath: string }> {
+  return (values ?? []).map((entry) => {
+    const separator = entry.lastIndexOf(':');
+
+    if (separator < 1 || separator === entry.length - 1) {
+      throw new CliError(`--volume expects NAME:PATH, got "${entry}"`);
+    }
+
+    return { volume: entry.slice(0, separator), mountPath: entry.slice(separator + 1) };
+  });
+}
+
+export function parseDisk(value: string): number {
+  const disk = Number(value);
+
+  if (!Number.isInteger(disk) || disk < 20 || disk > 2000) {
+    throw new CliError('Container disk must be between 20 and 2000 GB.');
+  }
+
+  return disk;
+}
+
+/** Whether any compute flag was typed, so a template's compute should give way. */
+export function computeFlagsGiven(cmd: Command, opts: { gpuType?: string; gpuCount?: string; cpuCores?: string }): boolean {
+  return cmd.getOptionValueSource('computeType') === 'cli'
+    || opts.gpuType !== undefined || opts.gpuCount !== undefined || opts.cpuCores !== undefined;
+}
 
 export function resolveCredentialRef(credentials: RegistryCredential[], ref: string): string {
   if (UUID_PATTERN.test(ref)) {

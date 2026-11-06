@@ -24,7 +24,8 @@ import {
   instanceDtoSchema,
 } from '../types/instance';
 import { networkVolumeDtoSchema, type NetworkVolumeDto } from '../types/volume';
-import { catalogTemplateSchema, priceRateSchema, type CatalogTemplate, type PriceRate } from '../types/pricing';
+import { priceRateSchema, type PriceRate } from '../types/pricing';
+import { templateSchema, type Template, type TemplateVisibility } from '../types/templates';
 import {
   runJobDtoSchema,
   runJobListSchema,
@@ -112,7 +113,10 @@ export function errorFromStatus(status: number, bodyText: string): CliError {
 
 export interface CreateInstanceBody {
   name: string;
-  templateVersionId?: string;
+  /** Fills in whatever the rest of the body leaves out. */
+  templateId?: string;
+  /** An official template's version; its current one when left out. */
+  templateVersion?: string;
   containerImage?: string;
   registryCredentialId?: string | null;
   computeSku?: string;
@@ -161,20 +165,45 @@ export interface UpdateVolumeBody {
 
 export interface CreateRunJobBody {
   name: string;
-  templateVersionId?: string;
+  /** Fills in whatever the rest of the body leaves out, its command included. */
+  templateId?: string;
+  /** An official template's version; its current one when left out. */
+  templateVersion?: string;
   containerImage?: string;
   registryCredentialId?: string | null;
   computeSku?: string;
   gpuCount?: number;
   ephemeralDiskGiB?: number;
   networkVolumeMounts?: Array<{ networkVolumeId: string; mountPath: string }>;
-  command: string[];
+  command?: string[];
   workingDirectory?: string;
   environment?: Array<{ name: string; value: string }>;
   secrets?: Array<{ name: string; value: string }>;
   timeoutSeconds?: number;
   preemptionRetries?: number;
   retainLogs?: boolean;
+}
+
+export interface TemplateBody {
+  name?: string;
+  description?: string;
+  visibility?: TemplateVisibility;
+  /** An official template to start from. */
+  baseTemplateId?: string;
+  /** Which of its versions; the current one when left out. */
+  baseTemplateVersion?: string;
+  containerImage?: string;
+  registryCredentialId?: string | null;
+  computeSku?: string | null;
+  ephemeralDiskGiB?: number | null;
+  networkVolumeMounts?: Array<{ networkVolumeId: string; mountPath: string }>;
+  command?: string[];
+  environment?: Array<{ name: string; value: string }>;
+  /** Replaces the saved secrets. */
+  secrets?: Array<{ name: string; value: string }>;
+  publicPorts?: number[];
+  /** Replaces the saved tags. */
+  tags?: string[];
 }
 
 export interface TerminalSession {
@@ -271,8 +300,25 @@ export class CloudClient {
     return this.typed('GET', workload === 'run-job' ? '/run-jobs/pricing' : '/instances/pricing', undefined, z.array(priceRateSchema));
   }
 
-  async templates(): Promise<CatalogTemplate[]> {
-    return this.typed('GET', '/templates/', undefined, z.array(catalogTemplateSchema));
+  async templates(): Promise<Template[]> {
+    return this.typed('GET', '/templates/', undefined, z.array(templateSchema));
+  }
+
+  /** By UUID or short id. */
+  async template(id: string): Promise<Template> {
+    return this.typed('GET', `/templates/${encodeURIComponent(id)}`, undefined, templateSchema);
+  }
+
+  async createTemplate(body: TemplateBody): Promise<Template> {
+    return this.typed('POST', '/templates/', body, templateSchema);
+  }
+
+  async updateTemplate(id: string, body: TemplateBody): Promise<Template> {
+    return this.typed('PATCH', `/templates/${encodeURIComponent(id)}`, body, templateSchema);
+  }
+
+  async deleteTemplate(id: string): Promise<number> {
+    return this.requestWithStatus('DELETE', `/templates/${encodeURIComponent(id)}`);
   }
 
   async organization(): Promise<Organization> {
