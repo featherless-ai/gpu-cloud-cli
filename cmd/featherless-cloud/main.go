@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"os"
+	"os/signal"
 	"slices"
+	"syscall"
 
 	"featherless.ai/featherless-cloud/internal/commands"
 	"featherless.ai/featherless-cloud/internal/errs"
@@ -12,6 +14,9 @@ import (
 )
 
 func main() {
+	// A closed pipe (`featherless-cloud volume find … | head`) ends the output
+	// with EPIPE instead of killing the process, as in the TypeScript CLI.
+	signal.Ignore(syscall.SIGPIPE)
 	os.Exit(run(os.Args[1:]))
 }
 
