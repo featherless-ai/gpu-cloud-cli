@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strings"
 
 	"go.yaml.in/yaml/v3"
 
@@ -306,6 +307,12 @@ func ResolveAuth(profileFlag string) (ResolvedAuth, error) {
 	}
 
 	if cfg.CurrentProfile == "" {
+		// Inside an instance the CLI signs in with the instance's own key, unless
+		// the person signed in with a profile of their own.
+		if key, isInstance := InstanceKey(); isInstance {
+			return ResolvedAuth{APIBase: APIBaseURL(), APIKey: key, Profile: "instance"}, nil
+		}
+
 		return ResolvedAuth{}, errs.New("Not logged in. Run featherless-cloud login.")
 	}
 
@@ -315,4 +322,22 @@ func ResolveAuth(profileFlag string) (ResolvedAuth, error) {
 	}
 
 	return ResolvedAuth{APIBase: profile.APIBase, APIKey: profile.APIKey, Profile: cfg.CurrentProfile}, nil
+}
+
+// InstanceKey returns the API key the platform gives a running instance, if
+// this is one.
+func InstanceKey() (string, bool) {
+	file := os.Getenv("FEATHERLESS_CLOUD_API_KEY_FILE")
+
+	if file == "" {
+		return "", false
+	}
+
+	raw, err := os.ReadFile(file)
+	if err != nil {
+		return "", false
+	}
+
+	key := strings.TrimSpace(string(raw))
+	return key, key != ""
 }
