@@ -2,9 +2,21 @@ package output
 
 import (
 	"errors"
+	"io"
+	"os"
 
 	"github.com/charmbracelet/huh"
+	"golang.org/x/term"
 )
+
+func stdoutWidth() int {
+	width, _, err := term.GetSize(int(os.Stdout.Fd()))
+	if err != nil {
+		return 0
+	}
+
+	return width
+}
 
 // ErrCancelled means the person cancelled a prompt. Commands print
 // "Cancelled." and exit 0.
@@ -23,10 +35,36 @@ type Prompter interface {
 	Select(message string, options []Option, initial string) (string, error)
 }
 
-type huhPrompter struct{}
+type huhPrompter struct {
+	// in and out replace the terminal in tests.
+	in  io.Reader
+	out io.Writer
+}
 
-func run(field huh.Field) error {
-	err := huh.NewForm(huh.NewGroup(field)).WithShowHelp(false).Run()
+// newForm wraps one field. Without a terminal width (a pty that reports no
+// size) the prompt library would size its fields from 0 and crash drawing them.
+func newForm(field huh.Field, terminalWidth int) *huh.Form {
+	form := huh.NewForm(huh.NewGroup(field)).WithShowHelp(false)
+
+	if terminalWidth <= 0 {
+		form = form.WithWidth(80)
+	}
+
+	return form
+}
+
+func (p huhPrompter) run(field huh.Field) error {
+	form := newForm(field, stdoutWidth())
+
+	if p.in != nil {
+		form = form.WithInput(p.in)
+	}
+
+	if p.out != nil {
+		form = form.WithOutput(p.out)
+	}
+
+	err := form.Run()
 
 	if errors.Is(err, huh.ErrUserAborted) {
 		return ErrCancelled
@@ -35,7 +73,7 @@ func run(field huh.Field) error {
 	return err
 }
 
-func (huhPrompter) Text(message, placeholder, initial string, validate func(string) error) (string, error) {
+func (p huhPrompter) Text(message, placeholder, initial string, validate func(string) error) (string, error) {
 	value := initial
 	input := huh.NewInput().Title(message).Placeholder(placeholder).Value(&value)
 
@@ -43,10 +81,10 @@ func (huhPrompter) Text(message, placeholder, initial string, validate func(stri
 		input = input.Validate(validate)
 	}
 
-	return value, run(input)
+	return value, p.run(input)
 }
 
-func (huhPrompter) Password(message string, validate func(string) error) (string, error) {
+func (p huhPrompter) Password(message string, validate func(string) error) (string, error) {
 	var value string
 	input := huh.NewInput().Title(message).EchoMode(huh.EchoModePassword).Value(&value)
 
@@ -54,15 +92,15 @@ func (huhPrompter) Password(message string, validate func(string) error) (string
 		input = input.Validate(validate)
 	}
 
-	return value, run(input)
+	return value, p.run(input)
 }
 
-func (huhPrompter) Confirm(message string, initial bool) (bool, error) {
+func (p huhPrompter) Confirm(message string, initial bool) (bool, error) {
 	value := initial
-	return value, run(huh.NewConfirm().Title(message).Value(&value))
+	return value, p.run(huh.NewConfirm().Title(message).Value(&value))
 }
 
-func (huhPrompter) Select(message string, options []Option, initial string) (string, error) {
+func (p huhPrompter) Select(message string, options []Option, initial string) (string, error) {
 	value := initial
 	choices := make([]huh.Option[string], len(options))
 
@@ -76,5 +114,5 @@ func (huhPrompter) Select(message string, options []Option, initial string) (str
 		choices[i] = huh.NewOption(label, option.Value)
 	}
 
-	return value, run(huh.NewSelect[string]().Title(message).Options(choices...).Value(&value))
+	return value, p.run(huh.NewSelect[string]().Title(message).Options(choices...).Value(&value))
 }
