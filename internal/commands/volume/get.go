@@ -20,7 +20,7 @@ func newGetCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "get <id>",
 		Short: "Show one network volume",
-		Args:  cobra.ExactArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := shared.NewContext(cmd)
 			ctx := cmd.Context()

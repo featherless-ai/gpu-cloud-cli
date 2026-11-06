@@ -1444,9 +1444,9 @@ func newSyncCommand() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "sync <local-folder> <vol://<volume>/<path>",
+		Use:   "sync <local-folder> <remote-folder>",
 		Short: "Sync a folder with a folder in a volume, sending what changed each way; never deletes",
-		Args:  cobra.ExactArgs(2),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := shared.NewContext(cmd)
 			ctx := cmd.Context()

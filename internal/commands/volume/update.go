@@ -20,7 +20,7 @@ func newUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update <id>",
 		Short: "Rename or grow a network volume",
-		Args:  cobra.ExactArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := shared.NewContext(cmd)
 			ctx := cmd.Context()

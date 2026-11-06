@@ -1481,7 +1481,7 @@ func newLsCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ls [path]",
 		Short: "List your volumes, or a folder in one (vol://<volume>/<path>)",
-		Args:  cobra.MaximumNArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := shared.NewContext(cmd)
 			ctx := cmd.Context()
@@ -1704,7 +1704,7 @@ func newFindCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "find <path>",
 		Short: "Find files and folders below a folder in a volume (vol://<volume>/<path>), printing each as it is found",
-		Args:  cobra.ExactArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := shared.NewContext(cmd)
 			flags := cmd.Flags()
@@ -1838,7 +1838,7 @@ func newMkdirCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "mkdir <paths...>",
 		Short: "Create folders in a volume",
-		Args:  cobra.MinimumNArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := shared.NewContext(cmd)
 			ctx := cmd.Context()
@@ -1890,7 +1890,7 @@ func newRmCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rm <paths...>",
 		Short: "Delete files or folders in a volume",
-		Args:  cobra.MinimumNArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := shared.NewContext(cmd)
 			ctx := cmd.Context()
@@ -2012,9 +2012,9 @@ func newCpCommand() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "cp <sources...> <destination>",
+		Use:   "cp <paths...>",
 		Short: "Copy files or folders between this computer and a volume, or between volumes; interrupted copies resume when run again",
-		Args:  cobra.MinimumNArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := shared.NewContext(cmd)
 			route, err := direction(args)
@@ -2062,9 +2062,9 @@ func newMvCommand() *cobra.Command {
 	}
 
 	cmd := &cobra.Command{
-		Use:   "mv <sources...> <destination>",
+		Use:   "mv <paths...>",
 		Short: "Move files or folders inside a volume, between volumes, or between this computer and a volume",
-		Args:  cobra.MinimumNArgs(1),
+		Args:  shared.Arguments,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := shared.NewContext(cmd)
 			ctx := cmd.Context()
