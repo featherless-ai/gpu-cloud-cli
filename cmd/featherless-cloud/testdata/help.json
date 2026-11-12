@@ -1,0 +1,833 @@
+[
+ {
+  "args": [
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "login",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud login [options]\n\nStore an API key for this device\n\nOptions:\n  --profile <name>   profile to store the credentials under (default: \"default\")\n  --key <secret>     API key to store (non-interactive)\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "logout",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud logout [options]\n\nRemove stored credentials for a profile\n\nOptions:\n  --profile <name>   profile to remove (default: current)\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance [options] [command]\n\nManage GPU instances\n\nOptions:\n  -h, --help                  display help for command\n\nGlobal Options:\n  --json                      output as JSON (for scripts and agents)\n  --non-interactive           disable spinners and prompts\n  -V, --version               output the version number\n\nCommands:\n  list [options]              List GPU instances\n  get [options] <id>          Show one instance\n  create [options]            Create an instance\n  update [options] <id>       Update an instance (config fields require a\n                              stopped instance)\n  start [options] <id>        Start an instance\n  stop [options] <id>         Stop an instance\n  restart [options] <id>      Restart an instance\n  delete [options] <id>       Delete an instance\n  logs [options] <id>         Print bounded debug output; use your own logging\n                              service for complete logs\n  history [options] <id>      Show instance lifecycle events\n  shell [options] <id>        Open an interactive shell in the instance (the\n                              shared tmux session \"default\")\n  ssh [options] <id>          Open a shell using your local OpenSSH client\n  tmux [options] <id> [name]  Create or attach an exact named tmux session over\n                              SSH (default: default, the session the browser\n                              terminal opens)\n  help [command]              display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "list",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance list [options]\n\nList GPU instances\n\nOptions:\n  --page <number>    page number (default: \"1\")\n  --limit <number>   instances per page (1-100) (default: \"20\")\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "get",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance get [options] <id>\n\nShow one instance\n\nArguments:\n  id                 instance name or short id\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "create",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance create [options]\n\nCreate an instance\n\nOptions:\n  --name <name>                 instance name (random when omitted)\n  --template <name>             template to launch: a name, org/<name>,\n                                featherless/<name> or an id; other flags\n                                override it\n  --template-id <id>            template to launch, by id\n  --template-version <version>  an official template's version, e.g. 2.11.0 (or\n                                --template name:version); its current one by\n                                default\n  --image <reference>           container image to run, or to replace the\n                                template's\n  --registry <name|id>          registry credential for a private image\n  --compute-type <type>         gpu or cpu (choices: \"gpu\", \"cpu\", default:\n                                \"gpu\")\n  --gpu-type <text>             GPU model substring, e.g. mi325x\n  --gpu-count <n>               GPUs per instance: 1, 2, 4, or 8\n  --cpu-cores <n>               vCPU cores for --compute-type cpu\n  --disk <gb>                   container disk in GB (20-2000) (default: \"20\")\n  --volume <name:path>          mount a network volume, repeatable (default: [])\n  --command <string>            override the start command (whitespace-split, no\n                                shell quoting)\n  --env <K=V>                   environment variable, repeatable (default: [])\n  --secret <K=V>                secret variable, repeatable (default: [])\n  --port <port>                 serve this port at a public HTTPS address,\n                                repeatable (default: [])\n  --profile <name>              profile to use\n  -h, --help                    display help for command\n\nGlobal Options:\n  --json                        output as JSON (for scripts and agents)\n  --non-interactive             disable spinners and prompts\n  -V, --version                 output the version number\n\nCreation is retry-safe: re-running the same command within the\nidempotency window returns the original instance.\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "update",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance update [options] <id>\n\nUpdate an instance (config fields require a stopped instance)\n\nArguments:\n  id                         instance name or short id\n\nOptions:\n  --name <name>              rename the instance\n  --image <reference>        container image (requires stopped state)\n  --registry <name|id|null>  registry credential, or \"null\" for public pulls\n  --disk <gb>                container disk in GB, 20-2000 (requires stopped\n                             state)\n  --command <string>         start command, whitespace-split (requires stopped\n                             state)\n  --env <K=V>                environment variable, repeatable — replaces the\n                             whole environment (default: [])\n  --port <port|none>         public port, repeatable — replaces every public\n                             port, applied at once; \"none\" removes them\n                             (default: [])\n  --profile <name>           profile to use\n  -h, --help                 display help for command\n\nGlobal Options:\n  --json                     output as JSON (for scripts and agents)\n  --non-interactive          disable spinners and prompts\n  -V, --version              output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "start",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance start [options] <id>\n\nStart an instance\n\nArguments:\n  id                 instance name or short id\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "stop",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance stop [options] <id>\n\nStop an instance\n\nArguments:\n  id                 instance name or short id\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "restart",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance restart [options] <id>\n\nRestart an instance\n\nArguments:\n  id                 instance name or short id\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "delete",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance delete [options] <id>\n\nDelete an instance\n\nArguments:\n  id                 instance name or short id\n\nOptions:\n  --profile <name>   profile to use\n  --yes              skip confirmation\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "logs",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance logs [options] <id>\n\nPrint bounded debug output; use your own logging service for complete logs\n\nArguments:\n  id                 instance name or short id\n\nOptions:\n  --head             show the captured beginning instead of recent output\n  --tail <n>         lines of history (1-5000) (default: \"500\")\n  --follow           keep streaming new lines\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "history",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance history [options] <id>\n\nShow instance lifecycle events\n\nArguments:\n  id                 instance name or short id\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "shell",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance shell [options] <id>\n\nOpen an interactive shell in the instance (the shared tmux session \"default\")\n\nArguments:\n  id                 instance name or short id\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "ssh",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance ssh [options] <id>\n\nOpen a shell using your local OpenSSH client\n\nArguments:\n  id                     instance name or short id\n\nOptions:\n  -i, --identity <file>  SSH private key file (otherwise use SSH config/agent)\n  --profile <name>       profile to use\n  -h, --help             display help for command\n\nGlobal Options:\n  --json                 output as JSON (for scripts and agents)\n  --non-interactive      disable spinners and prompts\n  -V, --version          output the version number\n\nUses native SSH config, agent and host-key checks. Register your public key in the console first.\nExit with exit, or Enter then ~. (the normal SSH escape).\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "tmux",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance tmux [options] <id> [name]\n\nCreate or attach an exact named tmux session over SSH (default: default, the\nsession the browser terminal opens)\n\nArguments:\n  id                     instance name or short id\n  name                   tmux session name\n\nOptions:\n  -i, --identity <file>  SSH private key file (otherwise use SSH config/agent)\n  --profile <name>       profile to use\n  -h, --help             display help for command\n\nGlobal Options:\n  --json                 output as JSON (for scripts and agents)\n  --non-interactive      disable spinners and prompts\n  -V, --version          output the version number\n\nNames: 1–64 letters, digits, underscores or hyphens; start with a letter or digit.\nUses tmux on the default socket for the SSH login user; tmux must already be installed.\nDetach with Ctrl-b d; reconnect with the same name. Enter then ~. disconnects SSH.\nSessions survive disconnects, not instance stop/restart/replacement or tmux server exit.\nNo software is installed and no SSH keys are registered automatically.\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud volume [options] [command]\n\nManage network storage volumes\n\nOptions:\n  -h, --help                                     display help for command\n\nGlobal Options:\n  --json                                         output as JSON (for scripts and agents)\n  --non-interactive                              disable spinners and prompts\n  -V, --version                                  output the version number\n\nCommands:\n  get [options] <id>                             Show one network volume\n  create [options] <name>                        Create a network volume\n  update [options] <id>                          Rename or grow a network volume\n  delete [options] <id>                          Delete a network volume\n  ls [options] [path]                            List your volumes, or a folder in one (vol://<volume>/<path>)\n  find [options] <path>                          Find files and folders below a folder in a volume (vol://<volume>/<path>), printing each as it is found\n  mkdir [options] <paths...>                     Create folders in a volume\n  rm [options] <paths...>                        Delete files or folders in a volume\n  cp [options] <paths...>                        Copy files or folders between this computer and a volume, or between volumes; interrupted copies resume when run again\n  mv [options] <paths...>                        Move files or folders inside a volume, between volumes, or between this computer and a volume\n  sync [options] <local-folder> <remote-folder>  Sync a folder with a folder in a volume, sending what changed each way; never deletes\n  help [command]                                 display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume",
+   "get",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud volume get [options] <id>\n\nShow one network volume\n\nArguments:\n  id                 volume name or id\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume",
+   "create",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud volume create [options] <name>\n\nCreate a network volume\n\nOptions:\n  --gb <n>           capacity in GB (10-10240) (default: \"100\")\n  --wait             wait until the volume is usable\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume",
+   "update",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud volume update [options] <id>\n\nRename or grow a network volume\n\nArguments:\n  id                 volume name or id\n\nOptions:\n  --name <new>       new volume name\n  --gb <n>           new capacity in GB (grow-only, 10-10240)\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume",
+   "delete",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud volume delete [options] <id>\n\nDelete a network volume\n\nArguments:\n  id                 volume name or id\n\nOptions:\n  --yes              skip confirmation\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume",
+   "ls",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud volume ls [options] [path]\n\nList your volumes, or a folder in one (vol://<volume>/<path>)\n\nArguments:\n  path                  vol://<volume>/<path> folder\n\nOptions:\n  -h, --human-readable  sizes like 1.5 KiB and 100.0 MiB instead of bytes\n  -r, --recursive       list everything below the folder, by path from the\n                        volume root\n  --summarize           end with the number of files and their total size\n  --profile <name>      profile to use\n  --help                display help for command\n\nGlobal Options:\n  --json                output as JSON (for scripts and agents)\n  --non-interactive     disable spinners and prompts\n  -V, --version         output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume",
+   "find",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud volume find [options] <path>\n\nFind files and folders below a folder in a volume (vol://<volume>/<path>),\nprinting each as it is found\n\nArguments:\n  path                  vol://<volume>/<path> folder to search\n\nOptions:\n  --name <pattern>      names matching a pattern like \"*.safetensors\": * matches\n                        any characters, ? one, [abc] one of those\n  --iname <pattern>     like --name, ignoring case\n  --type <f|d>          only files (f) or only folders (d) (choices: \"f\", \"d\")\n  --maxdepth <n>        how many levels below the folder to look\n  --size <+n|-n>        more (+) or less (-) than a size like 10G or 512K;\n                        repeat for a range\n  --newer-than <age>    modified within an age like 30m, 12h or 7d\n  --older-than <age>    modified longer ago than an age like 30m, 12h or 7d\n  -l, --long            print each with its modification time and size, like ls\n  -h, --human-readable  with -l, sizes like 1.5 KiB and 100.0 MiB instead of\n                        bytes\n  -0, --print0          end each with a NUL instead of a newline, for xargs -0\n  --profile <name>      profile to use\n  --help                display help for command\n\nGlobal Options:\n  --json                output as JSON (for scripts and agents)\n  --non-interactive     disable spinners and prompts\n  -V, --version         output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume",
+   "mkdir",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud volume mkdir [options] <paths...>\n\nCreate folders in a volume\n\nArguments:\n  paths              vol:// folders to create\n\nOptions:\n  -p, --parents      create missing parent folders\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume",
+   "rm",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud volume rm [options] <paths...>\n\nDelete files or folders in a volume\n\nArguments:\n  paths              vol:// files or folders\n\nOptions:\n  -r, --recursive    delete folders and everything in them\n  --yes              skip confirmation\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume",
+   "cp",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud volume cp [options] <sources...> <destination>\n\nCopy files or folders between this computer and a volume, or between volumes;\ninterrupted copies resume when run again\n\nArguments:\n  paths              sources, then the destination: local or vol:// paths\n\nOptions:\n  -r, --recursive    copy folders and everything in them\n  --overwrite        replace files that already exist at the destination\n  --update           skip files whose size and modification time already match\n  --concurrency <n>  files at a time, 1 to 32 (default: \"16\")\n  --dry-run          show what would be copied\n  -v, --verbose      print each file as it is copied\n  --progress         show a running total on stderr\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n\nExamples:\n  featherless-cloud volume cp -r ./weights vol://datasets/models/\n  featherless-cloud volume cp vol://datasets/models/out.bin .\n  featherless-cloud volume cp -r vol://datasets/models vol://checkpoints/\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume",
+   "mv",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud volume mv [options] <sources...> <destination>\n\nMove files or folders inside a volume, between volumes, or between this computer\nand a volume\n\nArguments:\n  paths              sources, then the destination: local or vol:// paths\n\nOptions:\n  --overwrite        replace files at the destination\n  --concurrency <n>  files at a time, 1 to 32 (default: \"16\")\n  -v, --verbose      print each file as it is moved\n  --progress         show a running total on stderr\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume",
+   "sync",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud volume sync [options] <local-folder> <vol://<volume>/<path>\n\nSync a folder with a folder in a volume, sending what changed each way; never\ndeletes\n\nArguments:\n  local-folder       folder on this computer\n  remote-folder      vol://<volume>/<path> folder in the volume\n\nOptions:\n  --mode <mode>      upload, download or both (default: \"both\")\n  --dry-run          show what would be sent, received and created\n  --mkdirs           create missing folders on either side\n  --force            send even when the chosen side is older (needs --mode\n                     upload or --mode download)\n  --concurrency <n>  files at a time, 1 to 32 (default: \"16\")\n  --include <glob>   only relative paths matching a glob (*, ** and ?) (default:\n                     [])\n  --exclude <glob>   skip relative paths matching a glob (*, ** and ?) (default:\n                     [])\n  -v, --verbose      print each file as it syncs\n  --progress         show a running total on stderr\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n\nExamples:\n  featherless-cloud volume sync ./weights vol://datasets/models/\n  featherless-cloud volume sync --mode download --mkdirs . vol://datasets/models\n  featherless-cloud volume sync --dry-run ./ckpt vol://datasets/ckpt\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "pricing",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud pricing [options] [command]\n\nBrowse compute and storage prices\n\nOptions:\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n\nCommands:\n  list [options]     List current prices\n  help [command]     display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "pricing",
+   "list",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud pricing list [options]\n\nList current prices\n\nOptions:\n  --workload <kind>  prices for instance or run-job (choices: \"instance\",\n                     \"run-job\", default: \"instance\")\n  --all              include storage and bandwidth rates\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "billing",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud billing [options] [command]\n\nShow balance and usage history\n\nOptions:\n  -h, --help          display help for command\n\nGlobal Options:\n  --json              output as JSON (for scripts and agents)\n  --non-interactive   disable spinners and prompts\n  -V, --version       output the version number\n\nCommands:\n  settings [options]  Show balance and reload settings\n  history [options]   List charges and top-ups\n  help [command]      display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "billing",
+   "settings",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud billing settings [options]\n\nShow balance and reload settings\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "billing",
+   "history",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud billing history [options]\n\nList charges and top-ups\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "runjob",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud runjob|job [options] [command]\n\nRun and manage Run Jobs\n\nOptions:\n  -h, --help             display help for command\n\nGlobal Options:\n  --json                 output as JSON (for scripts and agents)\n  --non-interactive      disable spinners and prompts\n  -V, --version          output the version number\n\nCommands:\n  list [options]         List Run Jobs\n  get [options] <id>     Show one Run Job\n  logs [options] <id>    Print bounded debug output; use your own logging\n                         service for complete logs\n  cancel [options] <id>  Cancel a queued or running Run Job\n  delete [options] <id>  Delete a Run Job record\n  help [command]         display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "runjob",
+   "list",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud runjob list [options]\n\nList Run Jobs\n\nOptions:\n  --page <number>    page number (default: \"1\")\n  --limit <number>   Run Jobs per page (1-100) (default: \"20\")\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "runjob",
+   "get",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud runjob get [options] <id>\n\nShow one Run Job\n\nArguments:\n  id                 Run Job short id\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "runjob",
+   "logs",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud runjob logs [options] <id>\n\nPrint bounded debug output; use your own logging service for complete logs\n\nArguments:\n  id                 Run Job short id\n\nOptions:\n  --head             show the captured beginning instead of recent output\n  --tail <n>         lines of history (1-5000) (default: \"500\")\n  --follow           keep streaming until the Run Job ends\n  --attempt <n>      output of an earlier attempt of a job that was started\n                     again\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "runjob",
+   "cancel",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud runjob cancel [options] <id>\n\nCancel a queued or running Run Job\n\nArguments:\n  id                 Run Job short id\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "runjob",
+   "delete",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud runjob delete [options] <id>\n\nDelete a Run Job record\n\nArguments:\n  id                 Run Job short id\n\nOptions:\n  --yes              skip confirmation\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "exec",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud exec [options] [command...]\n\nRun a command on temporary CPU or GPU compute\n\nOptions:\n  --name <name>                 Run Job name (random when omitted)\n  --template <name>             template: a name, org/<name>, featherless/<name>\n                                or an id; defaults to the PyTorch environment\n  --template-id <id>            template, by id\n  --template-version <version>  an official template's version, e.g. 2.11.0 (or\n                                --template name:version); its current one by\n                                default\n  --image <reference>           container image to run, or to replace the\n                                template's\n  --registry <name|id>          registry credential for a private image\n  --gpu-type <text>             GPU model substring, e.g. mi325x\n  --gpu-count <n>               GPUs: 1, 2, 4, or 8\n  --cpu-cores <n>               vCPU cores; mutually exclusive with GPU options\n  --disk <gb>                   container disk in GB (20-2000) (default: \"20\")\n  --volume <name:path>          mount a network volume, repeatable (default: [])\n  --workdir <path>              container working directory (default:\n                                \"/workspace\")\n  --env <K=V>                   environment variable, repeatable (default: [])\n  --secret <K=V>                secret variable, repeatable (default: [])\n  --timeout <seconds>           run time limit after compute assignment\n                                (1-86400) (default: \"86400\")\n  --preemption-retries <n>      start again from the beginning up to n times if\n                                interrupted for other work (0-3) (default: \"0\")\n  --no-retain-logs              disable output collection, including live\n                                attached output\n  --idempotency-key <key>       retry-safe execution key (random when omitted)\n  --detach                      submit without waiting for the result\n  --cancel-on-interrupt         cancel instead of detach when Ctrl-C is pressed\n  --profile <name>              authentication profile to use\n  -h, --help                    display help for command\n\nGlobal Options:\n  --json                        output as JSON (for scripts and agents)\n  --non-interactive             disable spinners and prompts\n  -V, --version                 output the version number\n\nExamples:\n  featherless-cloud exec --gpu-count 1 -- python -c 'import torch; print(torch.cuda.is_available())'\n  featherless-cloud exec --cpu-cores 32 -- python -c 'import os; print(os.cpu_count())'\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "ssh-keys",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud ssh-keys [options] [command]\n\nManage your SSH public keys\n\nOptions:\n  -h, --help              display help for command\n\nGlobal Options:\n  --json                  output as JSON (for scripts and agents)\n  --non-interactive       disable spinners and prompts\n  -V, --version           output the version number\n\nCommands:\n  list [options]          List your SSH public keys\n  add [options] [file]    Add an SSH public key for instance access\n  delete [options] <key>  Remove an SSH public key\n  help [command]          display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "ssh-keys",
+   "list",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud ssh-keys list [options]\n\nList your SSH public keys\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "ssh-keys",
+   "add",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud ssh-keys add [options] [file]\n\nAdd an SSH public key for instance access\n\nArguments:\n  file               public key file (default: ~/.ssh/id_ed25519.pub,\n                     id_ecdsa.pub or id_rsa.pub)\n\nOptions:\n  --name <name>      key name (default: the key comment, or this computer's\n                     name)\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "ssh-keys",
+   "delete",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud ssh-keys delete [options] <key>\n\nRemove an SSH public key\n\nArguments:\n  key                SSH key name or id\n\nOptions:\n  --yes              skip confirmation\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "registry-keys",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud registry-keys [options] [command]\n\nManage container registry logins for private images\n\nOptions:\n  -h, --help              display help for command\n\nGlobal Options:\n  --json                  output as JSON (for scripts and agents)\n  --non-interactive       disable spinners and prompts\n  -V, --version           output the version number\n\nCommands:\n  list [options]          List registry keys\n  add [options] <name>    Add a registry login for pulling private images\n  update [options] <key>  Change a registry key\n  delete [options] <key>  Remove a registry key\n  help [command]          display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "registry-keys",
+   "list",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud registry-keys list [options]\n\nList registry keys\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "registry-keys",
+   "add",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud registry-keys add [options] <name>\n\nAdd a registry login for pulling private images\n\nArguments:\n  name               name to pass with --registry\n\nOptions:\n  --server <host>    registry host, e.g. docker.io or ghcr.io\n  --username <user>  registry username\n  --password-stdin   read the password or access token from stdin\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n\nExamples:\n  featherless-cloud registry-keys add ghcr --server ghcr.io --username octocat\n  echo \"$GHCR_TOKEN\" | featherless-cloud registry-keys add ghcr --server ghcr.io --username octocat --password-stdin\n\nUse it with: featherless-cloud exec --image ghcr.io/octocat/app:1 --registry ghcr -- …\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "registry-keys",
+   "update",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud registry-keys update [options] <key>\n\nChange a registry key\n\nArguments:\n  key                registry key name or id\n\nOptions:\n  --name <name>      new name\n  --server <host>    new registry host\n  --username <user>  new registry username\n  --change-password  prompt for a new password or access token\n  --password-stdin   read a new password or access token from stdin\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "registry-keys",
+   "delete",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud registry-keys delete [options] <key>\n\nRemove a registry key\n\nArguments:\n  key                registry key name or id\n\nOptions:\n  --yes              skip confirmation\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "templates",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud templates [options] [command]\n\nSave launch settings and launch instances and Run Jobs from them\n\nOptions:\n  -h, --help                   display help for command\n\nGlobal Options:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n\nCommands:\n  list [options]               List official templates, yours, and those shared\n                               in your organization\n  show [options] <template>    Show a template's settings\n  create [options] <name>      Save launch settings as a template, private\n                               unless --visibility organization\n  update [options] <template>  Change a template; instances and Run Jobs already\n                               launched keep their settings\n  delete [options] <template>  Delete a template; instances and Run Jobs\n                               launched from it keep running\n  help [command]               display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "templates",
+   "list",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud templates list [options]\n\nList official templates, yours, and those shared in your organization\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "templates",
+   "show",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud templates show [options] <template>\n\nShow a template's settings\n\nArguments:\n  template           template name or id\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "templates",
+   "create",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud templates create [options] <name>\n\nSave launch settings as a template, private unless --visibility organization\n\nArguments:\n  name                       lowercase letters, numbers and hyphens; what you\n                             launch it by\n\nOptions:\n  --description <text>       what the template is for\n  --visibility <visibility>  private, or organization to let every member launch\n                             it with its secrets (choices: \"private\",\n                             \"organization\")\n  --template <name>          start from an official template's image, command\n                             and environment; name:version for an older version\n  --image <reference>        container image to run\n  --registry <name|id>       registry credential for a private --image\n  --compute-type <type>      gpu or cpu (choices: \"gpu\", \"cpu\", default: \"gpu\")\n  --gpu-type <text>          GPU model substring, e.g. mi325x\n  --gpu-count <n>            GPUs: 1, 2, 4, or 8\n  --cpu-cores <n>            vCPU cores for --compute-type cpu\n  --disk <gb>                container disk in GB (20-2000)\n  --volume <name:path>       mount a network volume, repeatable (default: [])\n  --command <string>         start command (whitespace-split, no shell quoting)\n  --env <K=V>                environment variable, repeatable (default: [])\n  --secret <K=V>             secret variable, repeatable; replaces the saved\n                             secrets (default: [])\n  --port <port>              serve this port at a public HTTPS address,\n                             repeatable (default: [])\n  --tag <tag>                label such as AMD or \"CUDA 12.8\", repeatable;\n                             replaces the saved tags (default: [])\n  --profile <name>           profile to use\n  -h, --help                 display help for command\n\nGlobal Options:\n  --json                     output as JSON (for scripts and agents)\n  --non-interactive          disable spinners and prompts\n  -V, --version              output the version number\n\nExamples:\n  featherless-cloud templates create trainer --image ghcr.io/acme/trainer:1 --gpu-count 1 --env EPOCHS=3\n  featherless-cloud instance create --template trainer\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "templates",
+   "update",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud templates update [options] <template>\n\nChange a template; instances and Run Jobs already launched keep their settings\n\nArguments:\n  template                   template name or id\n\nOptions:\n  --name <name>              new name\n  --description <text>       what the template is for\n  --visibility <visibility>  private, or organization to let every member launch\n                             it with its secrets (choices: \"private\",\n                             \"organization\")\n  --template <name>          start from an official template's image, command\n                             and environment; name:version for an older version\n  --image <reference>        container image to run\n  --registry <name|id>       registry credential for a private --image\n  --compute-type <type>      gpu or cpu (choices: \"gpu\", \"cpu\", default: \"gpu\")\n  --gpu-type <text>          GPU model substring, e.g. mi325x\n  --gpu-count <n>            GPUs: 1, 2, 4, or 8\n  --cpu-cores <n>            vCPU cores for --compute-type cpu\n  --disk <gb>                container disk in GB (20-2000)\n  --volume <name:path>       mount a network volume, repeatable (default: [])\n  --command <string>         start command (whitespace-split, no shell quoting)\n  --env <K=V>                environment variable, repeatable (default: [])\n  --secret <K=V>             secret variable, repeatable; replaces the saved\n                             secrets (default: [])\n  --port <port>              serve this port at a public HTTPS address,\n                             repeatable (default: [])\n  --tag <tag>                label such as AMD or \"CUDA 12.8\", repeatable;\n                             replaces the saved tags (default: [])\n  --profile <name>           profile to use\n  -h, --help                 display help for command\n\nGlobal Options:\n  --json                     output as JSON (for scripts and agents)\n  --non-interactive          disable spinners and prompts\n  -V, --version              output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "templates",
+   "delete",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud templates delete [options] <template>\n\nDelete a template; instances and Run Jobs launched from it keep running\n\nArguments:\n  template           template name or id\n\nOptions:\n  --yes              skip confirmation\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "upgrade",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud upgrade [options]\n\nUpgrade featherless-cloud to the latest published version\n\nOptions:\n  --force            reinstall even when already up to date\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "completion",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud completion [options] <shell>\n\nPrint a shell completion script (bash, zsh)\n\nArguments:\n  shell              bash or zsh (choices: \"bash\", \"zsh\")\n\nOptions:\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [],
+  "stdout": "",
+  "stderr": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
+  "exit": 1
+ },
+ {
+  "args": [
+   "instance"
+  ],
+  "stdout": "",
+  "stderr": "Usage: featherless-cloud instance [options] [command]\n\nManage GPU instances\n\nOptions:\n  -h, --help                  display help for command\n\nGlobal Options:\n  --json                      output as JSON (for scripts and agents)\n  --non-interactive           disable spinners and prompts\n  -V, --version               output the version number\n\nCommands:\n  list [options]              List GPU instances\n  get [options] <id>          Show one instance\n  create [options]            Create an instance\n  update [options] <id>       Update an instance (config fields require a\n                              stopped instance)\n  start [options] <id>        Start an instance\n  stop [options] <id>         Stop an instance\n  restart [options] <id>      Restart an instance\n  delete [options] <id>       Delete an instance\n  logs [options] <id>         Print bounded debug output; use your own logging\n                              service for complete logs\n  history [options] <id>      Show instance lifecycle events\n  shell [options] <id>        Open an interactive shell in the instance (the\n                              shared tmux session \"default\")\n  ssh [options] <id>          Open a shell using your local OpenSSH client\n  tmux [options] <id> [name]  Create or attach an exact named tmux session over\n                              SSH (default: default, the session the browser\n                              terminal opens)\n  help [command]              display help for command\n",
+  "exit": 1
+ },
+ {
+  "args": [
+   "instance",
+   "help"
+  ],
+  "stdout": "Usage: featherless-cloud instance [options] [command]\n\nManage GPU instances\n\nOptions:\n  -h, --help                  display help for command\n\nGlobal Options:\n  --json                      output as JSON (for scripts and agents)\n  --non-interactive           disable spinners and prompts\n  -V, --version               output the version number\n\nCommands:\n  list [options]              List GPU instances\n  get [options] <id>          Show one instance\n  create [options]            Create an instance\n  update [options] <id>       Update an instance (config fields require a\n                              stopped instance)\n  start [options] <id>        Start an instance\n  stop [options] <id>         Stop an instance\n  restart [options] <id>      Restart an instance\n  delete [options] <id>       Delete an instance\n  logs [options] <id>         Print bounded debug output; use your own logging\n                              service for complete logs\n  history [options] <id>      Show instance lifecycle events\n  shell [options] <id>        Open an interactive shell in the instance (the\n                              shared tmux session \"default\")\n  ssh [options] <id>          Open a shell using your local OpenSSH client\n  tmux [options] <id> [name]  Create or attach an exact named tmux session over\n                              SSH (default: default, the session the browser\n                              terminal opens)\n  help [command]              display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume"
+  ],
+  "stdout": "",
+  "stderr": "Usage: featherless-cloud volume [options] [command]\n\nManage network storage volumes\n\nOptions:\n  -h, --help                                     display help for command\n\nGlobal Options:\n  --json                                         output as JSON (for scripts and agents)\n  --non-interactive                              disable spinners and prompts\n  -V, --version                                  output the version number\n\nCommands:\n  get [options] <id>                             Show one network volume\n  create [options] <name>                        Create a network volume\n  update [options] <id>                          Rename or grow a network volume\n  delete [options] <id>                          Delete a network volume\n  ls [options] [path]                            List your volumes, or a folder in one (vol://<volume>/<path>)\n  find [options] <path>                          Find files and folders below a folder in a volume (vol://<volume>/<path>), printing each as it is found\n  mkdir [options] <paths...>                     Create folders in a volume\n  rm [options] <paths...>                        Delete files or folders in a volume\n  cp [options] <paths...>                        Copy files or folders between this computer and a volume, or between volumes; interrupted copies resume when run again\n  mv [options] <paths...>                        Move files or folders inside a volume, between volumes, or between this computer and a volume\n  sync [options] <local-folder> <remote-folder>  Sync a folder with a folder in a volume, sending what changed each way; never deletes\n  help [command]                                 display help for command\n",
+  "exit": 1
+ },
+ {
+  "args": [
+   "volume",
+   "help"
+  ],
+  "stdout": "Usage: featherless-cloud volume [options] [command]\n\nManage network storage volumes\n\nOptions:\n  -h, --help                                     display help for command\n\nGlobal Options:\n  --json                                         output as JSON (for scripts and agents)\n  --non-interactive                              disable spinners and prompts\n  -V, --version                                  output the version number\n\nCommands:\n  get [options] <id>                             Show one network volume\n  create [options] <name>                        Create a network volume\n  update [options] <id>                          Rename or grow a network volume\n  delete [options] <id>                          Delete a network volume\n  ls [options] [path]                            List your volumes, or a folder in one (vol://<volume>/<path>)\n  find [options] <path>                          Find files and folders below a folder in a volume (vol://<volume>/<path>), printing each as it is found\n  mkdir [options] <paths...>                     Create folders in a volume\n  rm [options] <paths...>                        Delete files or folders in a volume\n  cp [options] <paths...>                        Copy files or folders between this computer and a volume, or between volumes; interrupted copies resume when run again\n  mv [options] <paths...>                        Move files or folders inside a volume, between volumes, or between this computer and a volume\n  sync [options] <local-folder> <remote-folder>  Sync a folder with a folder in a volume, sending what changed each way; never deletes\n  help [command]                                 display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "pricing"
+  ],
+  "stdout": "",
+  "stderr": "Usage: featherless-cloud pricing [options] [command]\n\nBrowse compute and storage prices\n\nOptions:\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n\nCommands:\n  list [options]     List current prices\n  help [command]     display help for command\n",
+  "exit": 1
+ },
+ {
+  "args": [
+   "pricing",
+   "help"
+  ],
+  "stdout": "Usage: featherless-cloud pricing [options] [command]\n\nBrowse compute and storage prices\n\nOptions:\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n\nCommands:\n  list [options]     List current prices\n  help [command]     display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "billing"
+  ],
+  "stdout": "",
+  "stderr": "Usage: featherless-cloud billing [options] [command]\n\nShow balance and usage history\n\nOptions:\n  -h, --help          display help for command\n\nGlobal Options:\n  --json              output as JSON (for scripts and agents)\n  --non-interactive   disable spinners and prompts\n  -V, --version       output the version number\n\nCommands:\n  settings [options]  Show balance and reload settings\n  history [options]   List charges and top-ups\n  help [command]      display help for command\n",
+  "exit": 1
+ },
+ {
+  "args": [
+   "billing",
+   "help"
+  ],
+  "stdout": "Usage: featherless-cloud billing [options] [command]\n\nShow balance and usage history\n\nOptions:\n  -h, --help          display help for command\n\nGlobal Options:\n  --json              output as JSON (for scripts and agents)\n  --non-interactive   disable spinners and prompts\n  -V, --version       output the version number\n\nCommands:\n  settings [options]  Show balance and reload settings\n  history [options]   List charges and top-ups\n  help [command]      display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "runjob"
+  ],
+  "stdout": "",
+  "stderr": "Usage: featherless-cloud runjob|job [options] [command]\n\nRun and manage Run Jobs\n\nOptions:\n  -h, --help             display help for command\n\nGlobal Options:\n  --json                 output as JSON (for scripts and agents)\n  --non-interactive      disable spinners and prompts\n  -V, --version          output the version number\n\nCommands:\n  list [options]         List Run Jobs\n  get [options] <id>     Show one Run Job\n  logs [options] <id>    Print bounded debug output; use your own logging\n                         service for complete logs\n  cancel [options] <id>  Cancel a queued or running Run Job\n  delete [options] <id>  Delete a Run Job record\n  help [command]         display help for command\n",
+  "exit": 1
+ },
+ {
+  "args": [
+   "runjob",
+   "help"
+  ],
+  "stdout": "Usage: featherless-cloud runjob|job [options] [command]\n\nRun and manage Run Jobs\n\nOptions:\n  -h, --help             display help for command\n\nGlobal Options:\n  --json                 output as JSON (for scripts and agents)\n  --non-interactive      disable spinners and prompts\n  -V, --version          output the version number\n\nCommands:\n  list [options]         List Run Jobs\n  get [options] <id>     Show one Run Job\n  logs [options] <id>    Print bounded debug output; use your own logging\n                         service for complete logs\n  cancel [options] <id>  Cancel a queued or running Run Job\n  delete [options] <id>  Delete a Run Job record\n  help [command]         display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "ssh-keys"
+  ],
+  "stdout": "",
+  "stderr": "Usage: featherless-cloud ssh-keys [options] [command]\n\nManage your SSH public keys\n\nOptions:\n  -h, --help              display help for command\n\nGlobal Options:\n  --json                  output as JSON (for scripts and agents)\n  --non-interactive       disable spinners and prompts\n  -V, --version           output the version number\n\nCommands:\n  list [options]          List your SSH public keys\n  add [options] [file]    Add an SSH public key for instance access\n  delete [options] <key>  Remove an SSH public key\n  help [command]          display help for command\n",
+  "exit": 1
+ },
+ {
+  "args": [
+   "ssh-keys",
+   "help"
+  ],
+  "stdout": "Usage: featherless-cloud ssh-keys [options] [command]\n\nManage your SSH public keys\n\nOptions:\n  -h, --help              display help for command\n\nGlobal Options:\n  --json                  output as JSON (for scripts and agents)\n  --non-interactive       disable spinners and prompts\n  -V, --version           output the version number\n\nCommands:\n  list [options]          List your SSH public keys\n  add [options] [file]    Add an SSH public key for instance access\n  delete [options] <key>  Remove an SSH public key\n  help [command]          display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "registry-keys"
+  ],
+  "stdout": "",
+  "stderr": "Usage: featherless-cloud registry-keys [options] [command]\n\nManage container registry logins for private images\n\nOptions:\n  -h, --help              display help for command\n\nGlobal Options:\n  --json                  output as JSON (for scripts and agents)\n  --non-interactive       disable spinners and prompts\n  -V, --version           output the version number\n\nCommands:\n  list [options]          List registry keys\n  add [options] <name>    Add a registry login for pulling private images\n  update [options] <key>  Change a registry key\n  delete [options] <key>  Remove a registry key\n  help [command]          display help for command\n",
+  "exit": 1
+ },
+ {
+  "args": [
+   "registry-keys",
+   "help"
+  ],
+  "stdout": "Usage: featherless-cloud registry-keys [options] [command]\n\nManage container registry logins for private images\n\nOptions:\n  -h, --help              display help for command\n\nGlobal Options:\n  --json                  output as JSON (for scripts and agents)\n  --non-interactive       disable spinners and prompts\n  -V, --version           output the version number\n\nCommands:\n  list [options]          List registry keys\n  add [options] <name>    Add a registry login for pulling private images\n  update [options] <key>  Change a registry key\n  delete [options] <key>  Remove a registry key\n  help [command]          display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "templates"
+  ],
+  "stdout": "",
+  "stderr": "Usage: featherless-cloud templates [options] [command]\n\nSave launch settings and launch instances and Run Jobs from them\n\nOptions:\n  -h, --help                   display help for command\n\nGlobal Options:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n\nCommands:\n  list [options]               List official templates, yours, and those shared\n                               in your organization\n  show [options] <template>    Show a template's settings\n  create [options] <name>      Save launch settings as a template, private\n                               unless --visibility organization\n  update [options] <template>  Change a template; instances and Run Jobs already\n                               launched keep their settings\n  delete [options] <template>  Delete a template; instances and Run Jobs\n                               launched from it keep running\n  help [command]               display help for command\n",
+  "exit": 1
+ },
+ {
+  "args": [
+   "templates",
+   "help"
+  ],
+  "stdout": "Usage: featherless-cloud templates [options] [command]\n\nSave launch settings and launch instances and Run Jobs from them\n\nOptions:\n  -h, --help                   display help for command\n\nGlobal Options:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n\nCommands:\n  list [options]               List official templates, yours, and those shared\n                               in your organization\n  show [options] <template>    Show a template's settings\n  create [options] <name>      Save launch settings as a template, private\n                               unless --visibility organization\n  update [options] <template>  Change a template; instances and Run Jobs already\n                               launched keep their settings\n  delete [options] <template>  Delete a template; instances and Run Jobs\n                               launched from it keep running\n  help [command]               display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "help"
+  ],
+  "stdout": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "help",
+   "instance"
+  ],
+  "stdout": "Usage: featherless-cloud instance [options] [command]\n\nManage GPU instances\n\nOptions:\n  -h, --help                  display help for command\n\nGlobal Options:\n  --json                      output as JSON (for scripts and agents)\n  --non-interactive           disable spinners and prompts\n  -V, --version               output the version number\n\nCommands:\n  list [options]              List GPU instances\n  get [options] <id>          Show one instance\n  create [options]            Create an instance\n  update [options] <id>       Update an instance (config fields require a\n                              stopped instance)\n  start [options] <id>        Start an instance\n  stop [options] <id>         Stop an instance\n  restart [options] <id>      Restart an instance\n  delete [options] <id>       Delete an instance\n  logs [options] <id>         Print bounded debug output; use your own logging\n                              service for complete logs\n  history [options] <id>      Show instance lifecycle events\n  shell [options] <id>        Open an interactive shell in the instance (the\n                              shared tmux session \"default\")\n  ssh [options] <id>          Open a shell using your local OpenSSH client\n  tmux [options] <id> [name]  Create or attach an exact named tmux session over\n                              SSH (default: default, the session the browser\n                              terminal opens)\n  help [command]              display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "help",
+   "instance",
+   "list"
+  ],
+  "stdout": "Usage: featherless-cloud instance [options] [command]\n\nManage GPU instances\n\nOptions:\n  -h, --help                  display help for command\n\nGlobal Options:\n  --json                      output as JSON (for scripts and agents)\n  --non-interactive           disable spinners and prompts\n  -V, --version               output the version number\n\nCommands:\n  list [options]              List GPU instances\n  get [options] <id>          Show one instance\n  create [options]            Create an instance\n  update [options] <id>       Update an instance (config fields require a\n                              stopped instance)\n  start [options] <id>        Start an instance\n  stop [options] <id>         Stop an instance\n  restart [options] <id>      Restart an instance\n  delete [options] <id>       Delete an instance\n  logs [options] <id>         Print bounded debug output; use your own logging\n                              service for complete logs\n  history [options] <id>      Show instance lifecycle events\n  shell [options] <id>        Open an interactive shell in the instance (the\n                              shared tmux session \"default\")\n  ssh [options] <id>          Open a shell using your local OpenSSH client\n  tmux [options] <id> [name]  Create or attach an exact named tmux session over\n                              SSH (default: default, the session the browser\n                              terminal opens)\n  help [command]              display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "help",
+   "nosuch"
+  ],
+  "stdout": "",
+  "stderr": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
+  "exit": 1
+ },
+ {
+  "args": [
+   "instance",
+   "help",
+   "list"
+  ],
+  "stdout": "Usage: featherless-cloud instance list [options]\n\nList GPU instances\n\nOptions:\n  --page <number>    page number (default: \"1\")\n  --limit <number>   instances per page (1-100) (default: \"20\")\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "help",
+   "nosuch"
+  ],
+  "stdout": "",
+  "stderr": "Usage: featherless-cloud instance [options] [command]\n\nManage GPU instances\n\nOptions:\n  -h, --help                  display help for command\n\nGlobal Options:\n  --json                      output as JSON (for scripts and agents)\n  --non-interactive           disable spinners and prompts\n  -V, --version               output the version number\n\nCommands:\n  list [options]              List GPU instances\n  get [options] <id>          Show one instance\n  create [options]            Create an instance\n  update [options] <id>       Update an instance (config fields require a\n                              stopped instance)\n  start [options] <id>        Start an instance\n  stop [options] <id>         Stop an instance\n  restart [options] <id>      Restart an instance\n  delete [options] <id>       Delete an instance\n  logs [options] <id>         Print bounded debug output; use your own logging\n                              service for complete logs\n  history [options] <id>      Show instance lifecycle events\n  shell [options] <id>        Open an interactive shell in the instance (the\n                              shared tmux session \"default\")\n  ssh [options] <id>          Open a shell using your local OpenSSH client\n  tmux [options] <id> [name]  Create or attach an exact named tmux session over\n                              SSH (default: default, the session the browser\n                              terminal opens)\n  help [command]              display help for command\n",
+  "exit": 1
+ },
+ {
+  "args": [
+   "-h"
+  ],
+  "stdout": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "-h"
+  ],
+  "stdout": "Usage: featherless-cloud instance [options] [command]\n\nManage GPU instances\n\nOptions:\n  -h, --help                  display help for command\n\nGlobal Options:\n  --json                      output as JSON (for scripts and agents)\n  --non-interactive           disable spinners and prompts\n  -V, --version               output the version number\n\nCommands:\n  list [options]              List GPU instances\n  get [options] <id>          Show one instance\n  create [options]            Create an instance\n  update [options] <id>       Update an instance (config fields require a\n                              stopped instance)\n  start [options] <id>        Start an instance\n  stop [options] <id>         Stop an instance\n  restart [options] <id>      Restart an instance\n  delete [options] <id>       Delete an instance\n  logs [options] <id>         Print bounded debug output; use your own logging\n                              service for complete logs\n  history [options] <id>      Show instance lifecycle events\n  shell [options] <id>        Open an interactive shell in the instance (the\n                              shared tmux session \"default\")\n  ssh [options] <id>          Open a shell using your local OpenSSH client\n  tmux [options] <id> [name]  Create or attach an exact named tmux session over\n                              SSH (default: default, the session the browser\n                              terminal opens)\n  help [command]              display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "list",
+   "-h"
+  ],
+  "stdout": "Usage: featherless-cloud instance list [options]\n\nList GPU instances\n\nOptions:\n  --page <number>    page number (default: \"1\")\n  --limit <number>   instances per page (1-100) (default: \"20\")\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "job",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud runjob|job [options] [command]\n\nRun and manage Run Jobs\n\nOptions:\n  -h, --help             display help for command\n\nGlobal Options:\n  --json                 output as JSON (for scripts and agents)\n  --non-interactive      disable spinners and prompts\n  -V, --version          output the version number\n\nCommands:\n  list [options]         List Run Jobs\n  get [options] <id>     Show one Run Job\n  logs [options] <id>    Print bounded debug output; use your own logging\n                         service for complete logs\n  cancel [options] <id>  Cancel a queued or running Run Job\n  delete [options] <id>  Delete a Run Job record\n  help [command]         display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "job",
+   "list",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud runjob list [options]\n\nList Run Jobs\n\nOptions:\n  --page <number>    page number (default: \"1\")\n  --limit <number>   Run Jobs per page (1-100) (default: \"20\")\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "instance",
+   "list",
+   "--json",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud instance list [options]\n\nList GPU instances\n\nOptions:\n  --page <number>    page number (default: \"1\")\n  --limit <number>   instances per page (1-100) (default: \"20\")\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "volume",
+   "cp",
+   "--help",
+   "--non-interactive"
+  ],
+  "stdout": "Usage: featherless-cloud volume cp [options] <sources...> <destination>\n\nCopy files or folders between this computer and a volume, or between volumes;\ninterrupted copies resume when run again\n\nArguments:\n  paths              sources, then the destination: local or vol:// paths\n\nOptions:\n  -r, --recursive    copy folders and everything in them\n  --overwrite        replace files that already exist at the destination\n  --update           skip files whose size and modification time already match\n  --concurrency <n>  files at a time, 1 to 32 (default: \"16\")\n  --dry-run          show what would be copied\n  -v, --verbose      print each file as it is copied\n  --progress         show a running total on stderr\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n\nExamples:\n  featherless-cloud volume cp -r ./weights vol://datasets/models/\n  featherless-cloud volume cp vol://datasets/models/out.bin .\n  featherless-cloud volume cp -r vol://datasets/models vol://checkpoints/\n",
+  "stderr": "",
+  "exit": 0
+ }
+]

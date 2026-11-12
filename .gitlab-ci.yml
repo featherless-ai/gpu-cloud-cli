@@ -1,79 +1,82 @@
 stages:
   - test
+  - build
   - publish
 
-.node-test:
-  stage: test
-  image: node:22-alpine
+.go:
+  image: golang:1.27-bookworm
   timeout: 20 minutes
   interruptible: true
   tags:
     - platform
-  variables:
-    COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
-  # No cache: the runner has no shared cache server, so a saved store never
-  # reached the next job's runner session and saving it cost 20-25s per job.
-  before_script:
-    # The version script's tests drive a scratch git repository.
-    - apk add --no-cache git
-    - corepack enable && corepack prepare pnpm@10.4.1 --activate
-    - pnpm install --frozen-lockfile
   rules:
     - if: $CI_COMMIT_BRANCH
     - if: $CI_MERGE_REQUEST_EVENT_TYPE == "merge_train"
 
 lint:
-  extends: .node-test
+  extends: .go
   script:
-    - pnpm lint
-
-typecheck:
-  extends: .node-test
-  script:
-    - pnpm typecheck
+    - test -z "$(gofmt -l .)" || { gofmt -l .; exit 1; }
+    - go vet ./...
+    - GOOS=windows go vet ./...
+    - go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
 unit-tests:
-  extends: .node-test
+  extends: .go
   before_script:
-    # The version tests drive a scratch git repository; the completion
-    # tests run the generated scripts in bash and zsh.
-    - apk add --no-cache git bash zsh
-    - !reference [.node-test, before_script]
+    # The completion tests run the generated scripts in real bash and zsh.
+    - apt-get update -qq && apt-get install -y -qq --no-install-recommends zsh >/dev/null
   script:
-    - pnpm test --reporter=default --reporter=junit --outputFile=junit.xml
+    - go run gotest.tools/gotestsum@latest --junitfile junit.xml -- -race ./...
   artifacts:
     when: always
     reports:
       junit: junit.xml
 
+# Every platform's binary, laid out as the npm packages publish uploads.
 build:
-  extends: .node-test
+  extends: .go
+  stage: build
+  needs: []
   script:
-    - pnpm build
-    - node dist/index.js --version
-    - npm pack --dry-run
+    - scripts/build-npm.sh
+    - dist/npm/gpu-cloud-cli-linux-x64/bin/featherless-cloud --version
+  artifacts:
+    paths:
+      - dist/npm/
+    expire_in: 1 week
 
 # Merging a version bump to main publishes it to npm and tags v<version>.
-# NPM_TOKEN is a masked, protected CI variable holding an npm automation token.
+# The platform packages go first, so the package people install never points
+# at a version that isn't there. Each step skips what is already published,
+# so a retried job finishes the rest. NPM_TOKEN is a masked, protected CI
+# variable holding an npm automation token.
 publish:
-  extends: .node-test
   stage: publish
+  image: node:22-alpine
+  needs: [build, lint, unit-tests]
+  tags:
+    - platform
   rules:
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
   before_script:
     - apk add --no-cache curl
-    - !reference [.node-test, before_script]
   script:
     - VERSION=$(node -p "require('./package.json').version")
-    - |
-      if [ "$(npm view @featherlessai/gpu-cloud-cli@$VERSION version 2>/dev/null)" = "$VERSION" ]; then
-        echo "$VERSION is already published."
-        exit 0
-      fi
     - echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-    - npm publish --access public
+    - |
+      for dir in dist/npm/gpu-cloud-cli-*/ dist/npm/gpu-cloud-cli/; do
+        name=$(node -p "require('./$dir/package.json').name")
+        if [ "$(npm view "$name@$VERSION" version 2>/dev/null)" = "$VERSION" ]; then
+          echo "$name@$VERSION is already published."
+          continue
+        fi
+        (cd "$dir" && npm publish --access public)
+      done
     # The Releases API accepts the job token and creates the tag at this commit.
-    - >
-      curl --fail-with-body -sS -X POST -H "JOB-TOKEN: $CI_JOB_TOKEN" -H "Content-Type: application/json"
-      -d "{\"tag_name\": \"v$VERSION\", \"ref\": \"$CI_COMMIT_SHA\", \"name\": \"v$VERSION\"}"
-      "$CI_API_V4_URL/projects/$CI_PROJECT_ID/releases"
+    - |
+      if ! curl -sf -H "JOB-TOKEN: $CI_JOB_TOKEN" "$CI_API_V4_URL/projects/$CI_PROJECT_ID/releases/v$VERSION" >/dev/null; then
+        curl --fail-with-body -sS -X POST -H "JOB-TOKEN: $CI_JOB_TOKEN" -H "Content-Type: application/json" \
+          -d "{\"tag_name\": \"v$VERSION\", \"ref\": \"$CI_COMMIT_SHA\", \"name\": \"v$VERSION\"}" \
+          "$CI_API_V4_URL/projects/$CI_PROJECT_ID/releases"
+      fi
