@@ -417,8 +417,8 @@ func scenarios() []scenario {
 // purpose, and why. The rest of each run (stderr, exit code, config, requests)
 // still has to match.
 var improvedOutput = map[string]string{
-	"billing history (plain)":         "charges read -$2.51, not $-2.512345",
-	"billing history metered (plain)": "charges read -$0.0045, not $-0.0045",
+	"billing history (plain)":         "charges read -$2.51, not $-2.512345, and amounts align right",
+	"billing history metered (plain)": "charges read -$0.0045, not $-0.0045, and amounts align right",
 }
 
 func TestGoCLIMatchesTheTypeScriptCLI(t *testing.T) {

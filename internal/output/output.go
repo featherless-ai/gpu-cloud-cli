@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -29,6 +30,8 @@ const (
 type Table struct {
 	Header []string
 	Rows   [][]string
+	// RightAligned are the indexes of the columns to align right, such as amounts.
+	RightAligned []int
 }
 
 // Result is a formatter's text form: a table (with optional footer) or text.
@@ -108,7 +111,13 @@ func FormatTable(table Table) string {
 				width = widths[i]
 			}
 
-			cells[i] = cell + strings.Repeat(" ", max(0, width-utf8.RuneCountInString(cell)))
+			padding := strings.Repeat(" ", max(0, width-utf8.RuneCountInString(cell)))
+
+			if slices.Contains(table.RightAligned, i) {
+				cells[i] = padding + cell
+			} else {
+				cells[i] = cell + padding
+			}
 		}
 
 		return strings.Join(cells, "  ")

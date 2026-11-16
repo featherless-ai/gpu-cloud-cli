@@ -5,6 +5,20 @@ import (
 	"testing"
 )
 
+func TestFormatTableAlignsTheChosenColumnsRight(t *testing.T) {
+	table := Table{
+		Header:       []string{"TYPE", "AMOUNT"},
+		Rows:         [][]string{{"usage", "-$0.14"}, {"top_up", "+$50.00"}},
+		RightAligned: []int{1},
+	}
+
+	want := "TYPE     AMOUNT\n------  -------\nusage    -$0.14\ntop_up  +$50.00"
+
+	if got := FormatTable(table); got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
 // Interactive mode prints plain text with no gutter or symbols, so people and
 // agents read the same words; only a table gets blank lines around it.
 func TestInteractiveModePrintsPlainTextWithTablesSetOff(t *testing.T) {
