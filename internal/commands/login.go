@@ -83,9 +83,7 @@ func storeProfile(ctx *output.Context, profile, key, email string) error {
 }
 
 func signIn(cmd *cobra.Command, ctx *output.Context, profile, key string) error {
-	email, err := output.Spin(ctx, "Verifying key", func() (string, error) {
-		return verifyKey(cmd, key)
-	})
+	email, err := verifyKey(cmd, key)
 
 	if err != nil {
 		return err
@@ -115,7 +113,6 @@ func pasteKey(cmd *cobra.Command, ctx *output.Context, profile string) error {
 		answer, err := ctx.Prompt.Text("API key", "flkey_…", "", validate)
 
 		if err == output.ErrCancelled {
-			ctx.Log("Login cancelled.")
 			return &errs.Exit{Code: 0}
 		}
 

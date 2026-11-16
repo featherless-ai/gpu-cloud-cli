@@ -67,9 +67,7 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 
-			rates, err := output.Spin(ctx, "Fetching prices", func() ([]api.PriceRate, error) {
-				return client.Pricing(cmd.Context(), api.Workload(opts.workload))
-			})
+			rates, err := client.Pricing(cmd.Context(), api.Workload(opts.workload))
 
 			if err != nil {
 				return err

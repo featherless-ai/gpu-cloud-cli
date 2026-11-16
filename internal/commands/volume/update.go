@@ -37,35 +37,33 @@ func newUpdateCommand() *cobra.Command {
 				return out.Fatal("Nothing to update.")
 			}
 
-			volume, err := output.Spin(out, "Updating volume", func() (api.NetworkVolume, error) {
-				current, err := findAndGetVolume(ctx, client, args[0])
+			current, err := findAndGetVolume(ctx, client, args[0])
+
+			if err != nil {
+				return err
+			}
+
+			var body api.UpdateVolumeBody
+
+			if isRenamed {
+				body.Name = &opts.name
+			}
+
+			if isGrown {
+				capacity, err := parseCapacity(opts.gb)
 
 				if err != nil {
-					return api.NetworkVolume{}, err
+					return err
 				}
 
-				var body api.UpdateVolumeBody
-
-				if isRenamed {
-					body.Name = &opts.name
+				if capacity < current.CapacityGiB {
+					return errs.Newf("Volumes can only grow. Current capacity is %d GB.", current.CapacityGiB)
 				}
 
-				if isGrown {
-					capacity, err := parseCapacity(opts.gb)
+				body.CapacityGiB = &capacity
+			}
 
-					if err != nil {
-						return api.NetworkVolume{}, err
-					}
-
-					if capacity < current.CapacityGiB {
-						return api.NetworkVolume{}, errs.Newf("Volumes can only grow. Current capacity is %d GB.", current.CapacityGiB)
-					}
-
-					body.CapacityGiB = &capacity
-				}
-
-				return client.PatchVolume(ctx, current.ID, body)
-			})
+			volume, err := client.PatchVolume(ctx, current.ID, body)
 
 			if err != nil {
 				return err

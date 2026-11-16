@@ -3,7 +3,6 @@ package registrykeys
 import (
 	"github.com/spf13/cobra"
 
-	"featherless.ai/featherless-cloud/internal/api"
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/completion"
 	"featherless.ai/featherless-cloud/internal/output"
@@ -26,9 +25,7 @@ func newListCommand() *cobra.Command {
 				return err
 			}
 
-			keys, err := output.Spin(ctx, "Fetching registry keys", func() ([]api.RegistryCredential, error) {
-				return client.RegistryCredentials(cmd.Context())
-			})
+			keys, err := client.RegistryCredentials(cmd.Context())
 
 			if err != nil {
 				return err

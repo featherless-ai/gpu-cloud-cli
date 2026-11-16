@@ -1,5 +1,6 @@
-// Package output renders command results in the three modes: JSON for
-// scripts and agents, plain text, and the interactive terminal style.
+// Package output renders command results as JSON for scripts and agents, or as
+// plain text. Interactive mode prints the same text as plain mode and may also
+// ask questions at a prompt.
 package output
 
 import (
@@ -9,12 +10,10 @@ import (
 	"io"
 	"os"
 	"strings"
-	"sync"
 	"time"
 	"unicode/utf8"
 
 	"github.com/spf13/cobra"
-	"golang.org/x/term"
 
 	"featherless.ai/featherless-cloud/internal/errs"
 )
@@ -86,13 +85,13 @@ func EncodeJSON(data any, indent bool) string {
 	return strings.TrimSuffix(buf.String(), "\n")
 }
 
-func FormatTable(header []string, rows [][]string) string {
-	widths := make([]int, len(header))
+func FormatTable(table Table) string {
+	widths := make([]int, len(table.Header))
 
-	for i, h := range header {
+	for i, h := range table.Header {
 		widths[i] = utf8.RuneCountInString(h)
 
-		for _, row := range rows {
+		for _, row := range table.Rows {
 			if i < len(row) {
 				widths[i] = max(widths[i], utf8.RuneCountInString(row[i]))
 			}
@@ -121,9 +120,9 @@ func FormatTable(header []string, rows [][]string) string {
 		dashes[i] = strings.Repeat("-", w)
 	}
 
-	lines := []string{formatRow(header), strings.Join(dashes, "  ")}
+	lines := []string{formatRow(table.Header), strings.Join(dashes, "  ")}
 
-	for _, row := range rows {
+	for _, row := range table.Rows {
 		lines = append(lines, formatRow(row))
 	}
 
@@ -143,51 +142,33 @@ func (c *Context) Output(data any, format func() Result) {
 		return
 	}
 
-	text := FormatTable(result.Table.Header, result.Table.Rows)
+	// At a terminal a blank line sets the table off from the command above it
+	// and from the footer; plain mode keeps the lines scripts count on.
+	gap := ""
 
 	if c.Mode == Interactive {
-		c.styled(styleInfo, text)
-
-		if result.Footer != "" {
-			c.styled(styleInfo, result.Footer)
-		}
-
-		return
+		gap = "\n"
 	}
 
-	fmt.Fprintln(c.Stdout, text)
+	fmt.Fprint(c.Stdout, gap+FormatTable(*result.Table)+"\n")
 
 	if result.Footer != "" {
-		fmt.Fprintln(c.Stdout, result.Footer)
+		fmt.Fprint(c.Stdout, gap+result.Footer+"\n")
 	}
 }
 
 func (c *Context) Log(message string) {
-	switch c.Mode {
-	case JSON:
-	case Interactive:
-		c.styled(styleInfo, message)
-	default:
+	if c.Mode != JSON {
 		fmt.Fprintln(c.Stdout, message)
 	}
 }
 
 func (c *Context) Success(message string) {
-	switch c.Mode {
-	case JSON:
-	case Interactive:
-		c.styled(styleSuccess, message)
-	default:
-		fmt.Fprintln(c.Stdout, message)
-	}
+	c.Log(message)
 }
 
 func (c *Context) Warn(message string) {
-	switch c.Mode {
-	case JSON:
-	case Interactive:
-		c.styled(styleWarn, message)
-	default:
+	if c.Mode != JSON {
 		fmt.Fprintf(c.Stderr, "Warning: %s\n", message)
 	}
 }
@@ -205,100 +186,4 @@ func (c *Context) Error(message string) {
 func (c *Context) Fatal(message string) error {
 	c.Error(message)
 	return &errs.Exit{Code: 1}
-}
-
-// Spin runs fn behind a spinner in interactive mode.
-func Spin[T any](c *Context, label string, fn func() (T, error)) (T, error) {
-	if c.Mode != Interactive {
-		return fn()
-	}
-
-	stop := c.startSpinner(label)
-	result, err := fn()
-
-	if err != nil {
-		stop("Failed.")
-	} else {
-		stop(label + " done.")
-	}
-
-	return result, err
-}
-
-type style struct {
-	symbol string
-	color  string
-}
-
-var (
-	styleInfo    = style{"●", "\x1b[34m"}
-	styleSuccess = style{"◆", "\x1b[32m"}
-	styleWarn    = style{"▲", "\x1b[33m"}
-	styleStep    = style{"◇", "\x1b[32m"}
-)
-
-func (c *Context) colors() bool {
-	if os.Getenv("NO_COLOR") != "" {
-		return false
-	}
-
-	file, ok := c.Stdout.(*os.File)
-	return ok && term.IsTerminal(int(file.Fd()))
-}
-
-func (c *Context) paint(color, text string) string {
-	if !c.colors() {
-		return text
-	}
-
-	return color + text + "\x1b[0m"
-}
-
-// styled prints one message the way the interactive terminal UI does: a bar
-// line, then the symbol, with continuation lines under the bar.
-func (c *Context) styled(s style, message string) {
-	bar := c.paint("\x1b[90m", "│")
-	lines := strings.Split(message, "\n")
-	var out strings.Builder
-
-	fmt.Fprintf(&out, "%s\n%s  %s\n", bar, c.paint(s.color, s.symbol), lines[0])
-
-	for _, line := range lines[1:] {
-		fmt.Fprintf(&out, "%s  %s\n", bar, line)
-	}
-
-	fmt.Fprint(c.Stdout, out.String())
-}
-
-func (c *Context) startSpinner(label string) func(string) {
-	if !c.colors() {
-		return func(message string) { c.styled(styleStep, message) }
-	}
-
-	frames := []string{"◒", "◐", "◓", "◑"}
-	done := make(chan struct{})
-	var wg sync.WaitGroup
-	wg.Add(1)
-
-	go func() {
-		defer wg.Done()
-		ticker := time.NewTicker(80 * time.Millisecond)
-		defer ticker.Stop()
-
-		for i := 0; ; i++ {
-			fmt.Fprintf(c.Stdout, "\r\x1b[K%s  %s", c.paint("\x1b[35m", frames[i%len(frames)]), label)
-
-			select {
-			case <-done:
-				return
-			case <-ticker.C:
-			}
-		}
-	}()
-
-	return func(message string) {
-		close(done)
-		wg.Wait()
-		fmt.Fprintf(c.Stdout, "\r\x1b[K%s  %s\n", c.paint(styleStep.color, styleStep.symbol), message)
-	}
 }

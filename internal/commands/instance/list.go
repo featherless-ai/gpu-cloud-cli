@@ -43,9 +43,7 @@ func newListCommand() *cobra.Command {
 			page := int(shared.ParseNumber(opts.page))
 			limit := int(shared.ParseNumber(opts.limit))
 
-			data, err := output.Spin(ctx, "Fetching instances", func() (api.InstanceList, error) {
-				return client.ListInstances(cmd.Context(), page, limit)
-			})
+			data, err := client.ListInstances(cmd.Context(), page, limit)
 
 			if err != nil {
 				return err

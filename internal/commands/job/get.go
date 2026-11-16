@@ -130,9 +130,7 @@ func newGetCommand() *cobra.Command {
 				return err
 			}
 
-			job, err := output.Spin(ctx, "Fetching Run Job", func() (api.RunJob, error) {
-				return client.GetJob(cmd.Context(), args[0])
-			})
+			job, err := client.GetJob(cmd.Context(), args[0])
 
 			if err != nil {
 				return err

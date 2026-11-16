@@ -31,9 +31,7 @@ func newUpgradeCommand() *cobra.Command {
 			ctx := shared.NewContext(cmd)
 			current := version.Version
 
-			latest, err := output.Spin(ctx, "Checking for updates", func() (string, error) {
-				return update.FetchLatestVersion(cmd.Context())
-			})
+			latest, err := update.FetchLatestVersion(cmd.Context())
 
 			if err != nil {
 				return err
@@ -53,17 +51,8 @@ func newUpgradeCommand() *cobra.Command {
 				installerOutput = ctx.Stderr
 			}
 
-			method := update.CurrentInstall()
-			upgrade := func() (struct{}, error) {
-				return struct{}{}, update.Upgrade(cmd.Context(), method, latest, installerOutput)
-			}
-
 			// npm and brew print their own progress; a self-update downloads quietly.
-			if method == update.InstallStandalone {
-				_, err = output.Spin(ctx, "Downloading "+latest, upgrade)
-			} else {
-				_, err = upgrade()
-			}
+			err = update.Upgrade(cmd.Context(), update.CurrentInstall(), latest, installerOutput)
 
 			if err != nil {
 				return err

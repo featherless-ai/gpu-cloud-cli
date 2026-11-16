@@ -112,9 +112,7 @@ func newAddCommand() *cobra.Command {
 				return err
 			}
 
-			key, err := output.Spin(ctx, "Adding SSH key", func() (api.SSHKey, error) {
-				return client.AddSSHKey(cmd.Context(), api.AddSSHKeyBody{Name: name, PublicKey: publicKey})
-			})
+			key, err := client.AddSSHKey(cmd.Context(), api.AddSSHKeyBody{Name: name, PublicKey: publicKey})
 
 			if err != nil {
 				return err

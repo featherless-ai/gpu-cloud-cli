@@ -155,9 +155,7 @@ func newGetCommand() *cobra.Command {
 				return err
 			}
 
-			instance, err := output.Spin(ctx, "Fetching instance", func() (api.Instance, error) {
-				return client.GetInstance(cmd.Context(), id)
-			})
+			instance, err := client.GetInstance(cmd.Context(), id)
 
 			if err != nil {
 				return err

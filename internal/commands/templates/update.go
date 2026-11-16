@@ -13,9 +13,7 @@ import (
 )
 
 func findTemplate(cmd *cobra.Command, ctx *output.Context, client api.Cloud, ref string) (api.Template, error) {
-	templates, err := output.Spin(ctx, "Finding template", func() ([]api.Template, error) {
-		return client.Templates(cmd.Context())
-	})
+	templates, err := client.Templates(cmd.Context())
 
 	if err != nil {
 		return api.Template{}, err
@@ -65,9 +63,7 @@ func newUpdateCommand() *cobra.Command {
 				return errs.New("Nothing to change. Pass the settings to change, as for templates create.")
 			}
 
-			updated, err := output.Spin(ctx, "Updating template", func() (api.Template, error) {
-				return client.UpdateTemplate(cmd.Context(), template.ID, body)
-			})
+			updated, err := client.UpdateTemplate(cmd.Context(), template.ID, body)
 
 			if err != nil {
 				return err

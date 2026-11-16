@@ -108,9 +108,7 @@ func newHistoryCommand() *cobra.Command {
 				return err
 			}
 
-			ledger, err := output.Spin(ctx, "Fetching history", func() (api.PaginatedLedger, error) {
-				return client.BillingLedger(cmd.Context())
-			})
+			ledger, err := client.BillingLedger(cmd.Context())
 
 			if err != nil {
 				return err

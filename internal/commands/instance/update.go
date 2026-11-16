@@ -154,9 +154,7 @@ func newUpdateCommand() *cobra.Command {
 				return ctx.Fatal("Nothing to update.")
 			}
 
-			instance, err := output.Spin(ctx, "Updating instance", func() (api.Instance, error) {
-				return client.PatchInstance(cmd.Context(), id, body)
-			})
+			instance, err := client.PatchInstance(cmd.Context(), id, body)
 
 			if err != nil {
 				return err

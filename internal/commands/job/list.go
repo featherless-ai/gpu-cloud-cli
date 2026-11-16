@@ -47,9 +47,7 @@ func newListCommand() *cobra.Command {
 			page := int(shared.ParseNumber(opts.page))
 			limit := int(shared.ParseNumber(opts.limit))
 
-			data, err := output.Spin(ctx, "Fetching Run Jobs", func() (api.RunJobList, error) {
-				return client.ListJobs(cmd.Context(), page, limit)
-			})
+			data, err := client.ListJobs(cmd.Context(), page, limit)
 
 			if err != nil {
 				return err

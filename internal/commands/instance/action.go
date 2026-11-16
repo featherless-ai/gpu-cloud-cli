@@ -60,9 +60,7 @@ func newActionCommand(action api.InstanceAction) *cobra.Command {
 				}
 			}
 
-			instance, err := output.Spin(ctx, actionProgress[action]+" instance", func() (api.Instance, error) {
-				return client.InstanceAction(cmd.Context(), id, action)
-			})
+			instance, err := client.InstanceAction(cmd.Context(), id, action)
 
 			if err != nil {
 				return err

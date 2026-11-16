@@ -50,9 +50,7 @@ func newHistoryCommand() *cobra.Command {
 				return err
 			}
 
-			events, err := output.Spin(ctx, "Fetching history", func() ([]api.InstanceEvent, error) {
-				return client.InstanceHistory(cmd.Context(), id)
-			})
+			events, err := client.InstanceHistory(cmd.Context(), id)
 
 			if err != nil {
 				return err

@@ -73,9 +73,7 @@ func showAttempt(cmd *cobra.Command, ctx *output.Context, id string, opts *logsO
 		return err
 	}
 
-	job, err := output.Spin(ctx, "Fetching Run Job", func() (api.RunJob, error) {
-		return client.GetJob(cmd.Context(), id)
-	})
+	job, err := client.GetJob(cmd.Context(), id)
 
 	if err != nil {
 		return err
@@ -95,9 +93,7 @@ func showAttempt(cmd *cobra.Command, ctx *output.Context, id string, opts *logsO
 		return errs.Newf("No output was recorded for attempt %s.", shared.FormatNumber(number))
 	}
 
-	history, err := output.Spin(ctx, "Fetching logs", func() (api.RunJobLogHistory, error) {
-		return client.JobLogHistory(cmd.Context(), job.ID, *runID, instance.Section(opts.head))
-	})
+	history, err := client.JobLogHistory(cmd.Context(), job.ID, *runID, instance.Section(opts.head))
 
 	if err != nil {
 		return err
@@ -135,9 +131,7 @@ func showLogs(cmd *cobra.Command, id string, opts *logsOptions) error {
 
 	section := instance.Section(opts.head)
 
-	first, err := output.Spin(ctx, "Fetching logs", func() (api.RunJobLogs, error) {
-		return client.JobLogs(cmd.Context(), id, tail, section)
-	})
+	first, err := client.JobLogs(cmd.Context(), id, tail, section)
 
 	if err != nil {
 		return err
