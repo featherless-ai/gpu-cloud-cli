@@ -132,9 +132,7 @@ func newLogsCommand() *cobra.Command {
 
 			section := Section(opts.head)
 
-			first, err := output.Spin(ctx, "Fetching logs", func() (api.InstanceLogs, error) {
-				return client.InstanceLogs(cmd.Context(), id, tail, section)
-			})
+			first, err := client.InstanceLogs(cmd.Context(), id, tail, section)
 
 			if err != nil {
 				return err

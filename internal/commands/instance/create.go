@@ -132,9 +132,7 @@ func createInstance(cmd *cobra.Command, opts *createOptions) error {
 		return err
 	}
 
-	loaded, err := output.Spin(ctx, "Loading configurator", func() (configurator, error) {
-		return loadConfigurator(cmd, client, opts)
-	})
+	loaded, err := loadConfigurator(cmd, client, opts)
 
 	if err != nil {
 		return err
@@ -150,9 +148,7 @@ func createInstance(cmd *cobra.Command, opts *createOptions) error {
 	shouldAskForImage := chosen == nil && opts.image == "" && ctx.Mode == output.Interactive
 
 	if shouldAskForImage {
-		templates, err := output.Spin(ctx, "Loading templates", func() ([]api.Template, error) {
-			return client.Templates(cmd.Context())
-		})
+		templates, err := client.Templates(cmd.Context())
 
 		if err != nil {
 			return err
@@ -267,9 +263,7 @@ func createInstance(cmd *cobra.Command, opts *createOptions) error {
 		body.PublicPorts = ports
 	}
 
-	instance, err := output.Spin(ctx, "Creating instance", func() (api.Instance, error) {
-		return client.CreateInstance(cmd.Context(), body, shared.NewIdempotencyKey())
-	})
+	instance, err := client.CreateInstance(cmd.Context(), body, shared.NewIdempotencyKey())
 
 	if err != nil {
 		return err

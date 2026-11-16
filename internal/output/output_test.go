@@ -1,0 +1,51 @@
+package output
+
+import (
+	"bytes"
+	"testing"
+)
+
+func TestFormatTableAlignsTheChosenColumnsRight(t *testing.T) {
+	table := Table{
+		Header:       []string{"TYPE", "AMOUNT"},
+		Rows:         [][]string{{"usage", "-$0.14"}, {"top_up", "+$50.00"}},
+		RightAligned: []int{1},
+	}
+
+	want := "TYPE     AMOUNT\n------  -------\nusage    -$0.14\ntop_up  +$50.00"
+
+	if got := FormatTable(table); got != want {
+		t.Errorf("got\n%s\nwant\n%s", got, want)
+	}
+}
+
+// Interactive mode prints plain text with no gutter or symbols, so people and
+// agents read the same words; only a table gets blank lines around it.
+func TestInteractiveModePrintsPlainTextWithTablesSetOff(t *testing.T) {
+	wantStdouts := map[Mode]string{
+		Interactive: "Create an API key.\nVolume data updated.\n\nNAME\n----\ndata\n\n1 volume(s)\n",
+		Plain:       "Create an API key.\nVolume data updated.\nNAME\n----\ndata\n1 volume(s)\n",
+	}
+
+	for mode, wantStdout := range wantStdouts {
+		var stdout, stderr bytes.Buffer
+		ctx := &Context{Mode: mode, Stdout: &stdout, Stderr: &stderr}
+
+		ctx.Log("Create an API key.")
+		ctx.Success("Volume data updated.")
+		ctx.Warn("Organization GPU limit already reached.")
+		ctx.Output(nil, func() Result {
+			return Result{Table: &Table{Header: []string{"NAME"}, Rows: [][]string{{"data"}}}, Footer: "1 volume(s)"}
+		})
+
+		wantStderr := "Warning: Organization GPU limit already reached.\n"
+
+		if stdout.String() != wantStdout {
+			t.Errorf("mode %d stdout = %q, want %q", mode, stdout.String(), wantStdout)
+		}
+
+		if stderr.String() != wantStderr {
+			t.Errorf("mode %d stderr = %q, want %q", mode, stderr.String(), wantStderr)
+		}
+	}
+}

@@ -49,7 +49,7 @@ func readSecret(ctx *output.Context, fromStdin bool) (string, error) {
 
 	secret, err := ctx.Prompt.Password("Password or access token", validate)
 	if err != nil {
-		return "", shared.PromptFailure(ctx, err)
+		return "", shared.PromptFailure(err)
 	}
 
 	return secret, nil
@@ -97,9 +97,7 @@ func newAddCommand() *cobra.Command {
 			client := shared.NewCloud(auth.APIBase, auth.APIKey)
 			body := api.RegistryCredentialBody{Name: args[0], Registry: opts.server, Username: opts.username, Secret: secret}
 
-			key, err := output.Spin(ctx, "Adding registry key", func() (api.RegistryCredential, error) {
-				return client.AddRegistryCredential(cmd.Context(), body)
-			})
+			key, err := client.AddRegistryCredential(cmd.Context(), body)
 
 			if err != nil {
 				return explainForbidden(err)

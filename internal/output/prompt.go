@@ -21,8 +21,7 @@ func stdoutWidth() int {
 	return width
 }
 
-// ErrCancelled means the person cancelled a prompt. Commands print
-// "Cancelled." and exit 0.
+// ErrCancelled means the person cancelled a prompt. Commands exit 0 quietly.
 var ErrCancelled = errors.New("cancelled")
 
 type Option struct {

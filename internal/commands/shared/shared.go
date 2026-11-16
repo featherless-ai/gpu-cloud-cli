@@ -53,16 +53,15 @@ func Client(profile string) (api.Cloud, error) {
 	return NewCloud(auth.APIBase, auth.APIKey), nil
 }
 
-// Cancelled ends a command whose prompt was cancelled or declined.
-func Cancelled(ctx *output.Context) error {
-	ctx.Log("Cancelled.")
+// Cancelled ends a command whose prompt was cancelled or declined, quietly.
+func Cancelled() error {
 	return &errs.Exit{Code: 0}
 }
 
 // PromptFailure ends the command quietly when the prompt was cancelled.
-func PromptFailure(ctx *output.Context, err error) error {
+func PromptFailure(err error) error {
 	if errors.Is(err, output.ErrCancelled) {
-		return Cancelled(ctx)
+		return Cancelled()
 	}
 
 	return err
@@ -488,7 +487,7 @@ func selectCompute(prices []api.PriceRate, ctx *output.Context) (string, error) 
 	kind, err := ctx.Prompt.Select("What compute do you need?", kindOptions, "gpu")
 
 	if err != nil {
-		return "", PromptFailure(ctx, err)
+		return "", PromptFailure(err)
 	}
 
 	if kind == "cpu" {
@@ -513,7 +512,7 @@ func selectCompute(prices []api.PriceRate, ctx *output.Context) (string, error) 
 		chosen, err := ctx.Prompt.Select("How many vCPU cores?", coreOptions, "")
 
 		if err != nil {
-			return "", PromptFailure(ctx, err)
+			return "", PromptFailure(err)
 		}
 
 		return resolveCPUSKU(prices, &chosen)
@@ -529,7 +528,7 @@ func selectCompute(prices []api.PriceRate, ctx *output.Context) (string, error) 
 	count, err := ctx.Prompt.Select("How many GPUs?", countOptions, "1")
 
 	if err != nil {
-		return "", PromptFailure(ctx, err)
+		return "", PromptFailure(err)
 	}
 
 	var offers []api.PriceRate
@@ -557,7 +556,7 @@ func selectCompute(prices []api.PriceRate, ctx *output.Context) (string, error) 
 	sku, err := ctx.Prompt.Select("Which GPU offer?", offerOptions, "")
 
 	if err != nil {
-		return "", PromptFailure(ctx, err)
+		return "", PromptFailure(err)
 	}
 
 	return sku, nil
@@ -629,7 +628,7 @@ func SelectImage(templates []api.Template, ctx *output.Context) (ImageChoice, er
 		image, err := ctx.Prompt.Text("No templates are available. Enter a container image:", "", "", validate)
 
 		if err != nil {
-			return ImageChoice{}, PromptFailure(ctx, err)
+			return ImageChoice{}, PromptFailure(err)
 		}
 
 		return ImageChoice{ContainerImage: strings.TrimSpace(image)}, nil
@@ -650,7 +649,7 @@ func SelectImage(templates []api.Template, ctx *output.Context) (ImageChoice, er
 	id, err := ctx.Prompt.Select("Which template?", options, "")
 
 	if err != nil {
-		return ImageChoice{}, PromptFailure(ctx, err)
+		return ImageChoice{}, PromptFailure(err)
 	}
 
 	index := slices.IndexFunc(templates, func(template api.Template) bool { return template.ID == id })
@@ -1259,11 +1258,11 @@ func RequireDeletion(ctx *output.Context, label string, yes bool) error {
 		isConfirmed, err := ctx.Prompt.Confirm("Delete "+label+"? This cannot be undone.", true)
 
 		if err != nil {
-			return PromptFailure(ctx, err)
+			return PromptFailure(err)
 		}
 
 		if !isConfirmed {
-			return Cancelled(ctx)
+			return Cancelled()
 		}
 
 		return nil

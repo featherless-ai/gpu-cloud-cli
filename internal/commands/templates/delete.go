@@ -5,7 +5,6 @@ import (
 
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/completion"
-	"featherless.ai/featherless-cloud/internal/output"
 )
 
 func newDeleteCommand() *cobra.Command {
@@ -35,9 +34,7 @@ func newDeleteCommand() *cobra.Command {
 				return err
 			}
 
-			_, err = output.Spin(ctx, "Deleting template", func() (int, error) {
-				return client.DeleteTemplate(cmd.Context(), template.ID)
-			})
+			_, err = client.DeleteTemplate(cmd.Context(), template.ID)
 
 			if err != nil {
 				return err

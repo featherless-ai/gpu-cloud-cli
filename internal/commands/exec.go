@@ -480,9 +480,7 @@ func runExec(cmd *cobra.Command, command []string, opts *execOptions) error {
 		return err
 	}
 
-	loaded, err := output.Spin(ctx, "Loading execution options", func() (executionOptions, error) {
-		return loadExecutionOptions(cmd, client, opts)
-	})
+	loaded, err := loadExecutionOptions(cmd, client, opts)
 
 	if err != nil {
 		return err
@@ -499,9 +497,7 @@ func runExec(cmd *cobra.Command, command []string, opts *execOptions) error {
 		key = shared.NewIdempotencyKey()
 	}
 
-	submitted, err := output.Spin(ctx, "Starting command", func() (api.RunJob, error) {
-		return client.CreateJob(cmd.Context(), body, key)
-	})
+	submitted, err := client.CreateJob(cmd.Context(), body, key)
 
 	if err != nil {
 		return err

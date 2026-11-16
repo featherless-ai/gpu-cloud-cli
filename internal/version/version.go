@@ -56,15 +56,23 @@ func parts(version string) [3]int {
 }
 
 // FormatDollars renders micro-dollar amounts as dollars; sub-cent amounts keep
-// full micro precision. Never shows micro units.
+// full micro precision. Never shows micro units. A charge reads -$0.14: the
+// sign goes before the dollar sign, and the cent rule looks at the size alone.
 func FormatDollars(micros string) string {
 	m, err := strconv.ParseFloat(micros, 64)
 	if err != nil {
 		m = 0
 	}
 
+	sign := ""
+
+	if m < 0 {
+		sign = "-"
+		m = -m
+	}
+
 	if m >= 10_000 {
-		return "$" + strconv.FormatFloat(m/1e6, 'f', 2, 64)
+		return sign + "$" + strconv.FormatFloat(m/1e6, 'f', 2, 64)
 	}
 
 	dollars := strings.TrimRight(strconv.FormatFloat(m/1e6, 'f', 6, 64), "0")
@@ -73,5 +81,5 @@ func FormatDollars(micros string) string {
 		dollars += "00"
 	}
 
-	return "$" + dollars
+	return sign + "$" + dollars
 }

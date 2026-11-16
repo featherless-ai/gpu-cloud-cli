@@ -77,17 +77,14 @@ func newCreateCommand() *cobra.Command {
 				return err
 			}
 
-			volume, err := output.Spin(out, "Creating volume", func() (api.NetworkVolume, error) {
-				capacity, err := parseCapacity(opts.gb)
+			capacity, err := parseCapacity(opts.gb)
 
-				if err != nil {
-					return api.NetworkVolume{}, err
-				}
+			if err != nil {
+				return err
+			}
 
-				body := api.CreateVolumeBody{Name: args[0], CapacityGiB: capacity}
-
-				return client.CreateVolume(ctx, body, shared.NewIdempotencyKey())
-			})
+			body := api.CreateVolumeBody{Name: args[0], CapacityGiB: capacity}
+			volume, err := client.CreateVolume(ctx, body, shared.NewIdempotencyKey())
 
 			if err != nil {
 				return err

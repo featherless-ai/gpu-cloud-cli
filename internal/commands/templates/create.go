@@ -49,9 +49,7 @@ func newCreateCommand() *cobra.Command {
 
 			body.Name = &name
 
-			template, err := output.Spin(ctx, "Saving template", func() (api.Template, error) {
-				return client.CreateTemplate(cmd.Context(), body)
-			})
+			template, err := client.CreateTemplate(cmd.Context(), body)
 
 			if err != nil {
 				return err

@@ -106,9 +106,7 @@ func newShowCommand() *cobra.Command {
 				return err
 			}
 
-			loaded, err := output.Spin(ctx, "Fetching template", func() (catalog, error) {
-				return loadCatalog(cmd, client)
-			})
+			loaded, err := loadCatalog(cmd, client)
 
 			if err != nil {
 				return err

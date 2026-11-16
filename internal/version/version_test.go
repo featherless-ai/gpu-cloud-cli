@@ -33,6 +33,21 @@ func TestFormatDollarsKeepsSubCentPrecision(t *testing.T) {
 	}
 }
 
+func TestFormatDollarsPutsTheMinusBeforeTheDollarSignAndRoundsChargesLikeCredits(t *testing.T) {
+	cases := map[string]string{
+		"-144703":  "-$0.14",
+		"-2512345": "-$2.51",
+		"-4500":    "-$0.0045",
+		"-120":     "-$0.00012",
+	}
+
+	for micros, want := range cases {
+		if got := FormatDollars(micros); got != want {
+			t.Errorf("FormatDollars(%q) = %q, want %q", micros, got, want)
+		}
+	}
+}
+
 func TestFormatDollarsRendersZero(t *testing.T) {
 	if got := FormatDollars("0"); got != "$0.00" {
 		t.Errorf("got %q", got)

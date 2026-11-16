@@ -7,7 +7,6 @@ import (
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/completion"
 	"featherless.ai/featherless-cloud/internal/errs"
-	"featherless.ai/featherless-cloud/internal/output"
 )
 
 func newUpdateCommand() *cobra.Command {
@@ -63,9 +62,7 @@ func newUpdateCommand() *cobra.Command {
 				return err
 			}
 
-			keys, err := output.Spin(ctx, "Finding registry key", func() ([]api.RegistryCredential, error) {
-				return client.RegistryCredentials(cmd.Context())
-			})
+			keys, err := client.RegistryCredentials(cmd.Context())
 
 			if err != nil {
 				return err
@@ -76,9 +73,7 @@ func newUpdateCommand() *cobra.Command {
 				return err
 			}
 
-			key, err := output.Spin(ctx, "Updating registry key", func() (api.RegistryCredential, error) {
-				return client.UpdateRegistryCredential(cmd.Context(), id, body)
-			})
+			key, err := client.UpdateRegistryCredential(cmd.Context(), id, body)
 
 			if err != nil {
 				return explainForbidden(err)

@@ -30,9 +30,7 @@ func newCancelCommand() *cobra.Command {
 				return err
 			}
 
-			job, err := output.Spin(ctx, "Cancelling Run Job", func() (api.RunJob, error) {
-				return client.CancelJob(cmd.Context(), args[0])
-			})
+			job, err := client.CancelJob(cmd.Context(), args[0])
 
 			if err != nil {
 				return err
@@ -74,9 +72,7 @@ func newDeleteCommand() *cobra.Command {
 				return err
 			}
 
-			job, err := output.Spin(ctx, "Deleting Run Job", func() (api.RunJob, error) {
-				return client.DeleteJob(cmd.Context(), args[0])
-			})
+			job, err := client.DeleteJob(cmd.Context(), args[0])
 
 			if err != nil {
 				return err

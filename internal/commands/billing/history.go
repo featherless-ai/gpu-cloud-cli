@@ -108,9 +108,7 @@ func newHistoryCommand() *cobra.Command {
 				return err
 			}
 
-			ledger, err := output.Spin(ctx, "Fetching history", func() (api.PaginatedLedger, error) {
-				return client.BillingLedger(cmd.Context())
-			})
+			ledger, err := client.BillingLedger(cmd.Context())
 
 			if err != nil {
 				return err
@@ -123,7 +121,7 @@ func newHistoryCommand() *cobra.Command {
 					rows[i] = []string{entryDate(entry), string(entry.Type), entryDescription(entry), amount(entry.AmountMicros)}
 				}
 
-				table := &output.Table{Header: []string{"DATE", "TYPE", "DESCRIPTION", "AMOUNT"}, Rows: rows}
+				table := &output.Table{Header: []string{"DATE", "TYPE", "DESCRIPTION", "AMOUNT"}, Rows: rows, RightAligned: []int{3}}
 				footer := shared.FormatNumber(float64(len(ledger.Items))) + " of " + shared.FormatNumber(ledger.Pagination.TotalItems) + " entry(s)"
 
 				return output.Result{Table: table, Footer: footer}

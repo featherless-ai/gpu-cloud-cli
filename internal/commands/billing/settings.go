@@ -3,7 +3,6 @@ package billing
 import (
 	"github.com/spf13/cobra"
 
-	"featherless.ai/featherless-cloud/internal/api"
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/completion"
 	"featherless.ai/featherless-cloud/internal/config"
@@ -28,9 +27,7 @@ func newSettingsCommand() *cobra.Command {
 				return err
 			}
 
-			summary, err := output.Spin(ctx, "Fetching billing", func() (api.BillingSummary, error) {
-				return client.BillingSummary(cmd.Context())
-			})
+			summary, err := client.BillingSummary(cmd.Context())
 
 			if err != nil {
 				return err

@@ -263,7 +263,7 @@ Add credit and set up auto-reload under [Billing](https://console.cloud.featherl
 ## Scripting
 
 - `--json` prints machine-readable JSON on stdout, errors included, and never prompts.
-- `--non-interactive` prints plain text without spinners or prompts.
+- Output is plain text either way; `--non-interactive` also stops the CLI from prompting.
 - Commands that delete something need `--yes` when they can't ask.
 - Non-zero exit codes mean failure; `ssh`, `tmux` and `exec` pass on the remote command's exit code.
 

@@ -5,7 +5,6 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"featherless.ai/featherless-cloud/internal/api"
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/completion"
 	"featherless.ai/featherless-cloud/internal/output"
@@ -30,9 +29,7 @@ func newGetCommand() *cobra.Command {
 				return err
 			}
 
-			volume, err := output.Spin(out, "Fetching volume", func() (api.NetworkVolume, error) {
-				return findAndGetVolume(ctx, client, args[0])
-			})
+			volume, err := findAndGetVolume(ctx, client, args[0])
 
 			if err != nil {
 				return err

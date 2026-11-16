@@ -5,10 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"featherless.ai/featherless-cloud/internal/api"
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/completion"
-	"featherless.ai/featherless-cloud/internal/output"
 )
 
 func newDeleteCommand() *cobra.Command {
@@ -30,9 +28,7 @@ func newDeleteCommand() *cobra.Command {
 				return err
 			}
 
-			volume, err := output.Spin(out, "Finding volume", func() (api.NetworkVolume, error) {
-				return findAndGetVolume(ctx, client, args[0])
-			})
+			volume, err := findAndGetVolume(ctx, client, args[0])
 
 			if err != nil {
 				return err
@@ -54,9 +50,7 @@ func newDeleteCommand() *cobra.Command {
 				return err
 			}
 
-			_, err = output.Spin(out, "Deleting volume", func() (int, error) {
-				return client.DeleteVolume(ctx, volume.ID, len(attached) > 0)
-			})
+			_, err = client.DeleteVolume(ctx, volume.ID, len(attached) > 0)
 
 			if err != nil {
 				return err
