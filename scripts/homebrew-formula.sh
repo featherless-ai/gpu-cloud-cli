@@ -23,6 +23,7 @@ class FeatherlessCloud < Formula
   desc "Command-line client for Featherless GPU Cloud"
   homepage "https://console.cloud.featherless.ai"
   version "$version"
+  license "MIT"
 
   on_macos do
     on_arm do

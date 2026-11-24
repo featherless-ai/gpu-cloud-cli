@@ -3,6 +3,6 @@
   "version": "0.2.1",
   "description": "Command-line client for Featherless GPU Cloud",
   "homepage": "https://console.cloud.featherless.ai",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "private": true
 }

@@ -46,7 +46,7 @@ for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64 windows/amd64; d
   "version": "$version",
   "description": "The featherless-cloud binary for $os-$cpu",
   "homepage": "https://console.cloud.featherless.ai",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "os": ["$os"],
   "cpu": ["$cpu"],
   "files": ["bin"],
@@ -62,6 +62,7 @@ main="$out/gpu-cloud-cli"
 mkdir -p "$main/bin"
 cp "$root/npm/featherless-cloud.cjs" "$main/bin/featherless-cloud.cjs"
 cp "$root/README.md" "$main/README.md"
+cp "$root/LICENSE" "$main/LICENSE"
 
 cat > "$main/package.json" <<JSON
 {
@@ -69,7 +70,7 @@ cat > "$main/package.json" <<JSON
   "version": "$version",
   "description": "Command-line client for Featherless GPU Cloud",
   "homepage": "https://console.cloud.featherless.ai",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "bin": { "featherless-cloud": "bin/featherless-cloud.cjs" },
   "files": ["bin"],
   "engines": { "node": ">=18" },
