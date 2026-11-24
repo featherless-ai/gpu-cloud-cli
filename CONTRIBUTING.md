@@ -33,8 +33,11 @@ PARITY_TS_CLI=/path/to/old/dist/index.js PARITY_GO_CLI=/tmp/featherless-cloud go
 
 ## Releases
 
-Bump `version` in `package.json` in the MR that should ship. When it merges, the `publish` job on
-`main` publishes the platform packages (`@featherlessai/gpu-cloud-cli-<os>-<arch>`) and then
-`@featherlessai/gpu-cloud-cli` to npm, and tags `v<version>`. Merges without a bump publish nothing.
+Bump `version` in `package.json` in the PR that should ship. When it merges, the `publish` job of
+`.github/workflows/ci.yml` on `main` publishes the platform packages
+(`@featherlessai/gpu-cloud-cli-<os>-<arch>`) and then `@featherlessai/gpu-cloud-cli` to npm, and
+tags `v<version>`. Merges without a bump publish nothing. The same workflow runs lint, the unit
+tests and the five-platform build on every pull request and on every push to `main`, on GitHub
+Actions.
 
 `scripts/homebrew-formula.sh <version>` prints a Homebrew formula for a published version.
