@@ -3,7 +3,7 @@
   "args": [
    "--help"
   ],
-  "stdout": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
+  "stdout": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  gpu                          List the GPU models you can run on\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
   "stderr": "",
   "exit": 0
  },
@@ -304,6 +304,25 @@
  },
  {
   "args": [
+   "gpu",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud gpu [options] [command]\n\nList the GPU models you can run on\n\nOptions:\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n\nCommands:\n  list [options]     List each GPU model, its memory, GPU counts and hourly\n                     price\n  help [command]     display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "gpu",
+   "list",
+   "--help"
+  ],
+  "stdout": "Usage: featherless-cloud gpu list [options]\n\nList each GPU model, its memory, GPU counts and hourly price\n\nOptions:\n  --profile <name>   profile to use\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
    "billing",
    "--help"
   ],
@@ -567,7 +586,7 @@
  {
   "args": [],
   "stdout": "",
-  "stderr": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
+  "stderr": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  gpu                          List the GPU models you can run on\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
   "exit": 1
  },
  {
@@ -618,6 +637,23 @@
    "help"
   ],
   "stdout": "Usage: featherless-cloud pricing [options] [command]\n\nBrowse compute and storage prices\n\nOptions:\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n\nCommands:\n  list [options]     List current prices\n  help [command]     display help for command\n",
+  "stderr": "",
+  "exit": 0
+ },
+ {
+  "args": [
+   "gpu"
+  ],
+  "stdout": "",
+  "stderr": "Usage: featherless-cloud gpu [options] [command]\n\nList the GPU models you can run on\n\nOptions:\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n\nCommands:\n  list [options]     List each GPU model, its memory, GPU counts and hourly\n                     price\n  help [command]     display help for command\n",
+  "exit": 1
+ },
+ {
+  "args": [
+   "gpu",
+   "help"
+  ],
+  "stdout": "Usage: featherless-cloud gpu [options] [command]\n\nList the GPU models you can run on\n\nOptions:\n  -h, --help         display help for command\n\nGlobal Options:\n  --json             output as JSON (for scripts and agents)\n  --non-interactive  disable spinners and prompts\n  -V, --version      output the version number\n\nCommands:\n  list [options]     List each GPU model, its memory, GPU counts and hourly\n                     price\n  help [command]     display help for command\n",
   "stderr": "",
   "exit": 0
  },
@@ -710,7 +746,7 @@
   "args": [
    "help"
   ],
-  "stdout": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
+  "stdout": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  gpu                          List the GPU models you can run on\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
   "stderr": "",
   "exit": 0
  },
@@ -739,7 +775,7 @@
    "nosuch"
   ],
   "stdout": "",
-  "stderr": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
+  "stderr": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  gpu                          List the GPU models you can run on\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
   "exit": 1
  },
  {
@@ -766,7 +802,7 @@
   "args": [
    "-h"
   ],
-  "stdout": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
+  "stdout": "Usage: featherless-cloud [options] [command]\n\nFeatherless GPU Cloud CLI\n\nOptions:\n  --json                       output as JSON (for scripts and agents)\n  --non-interactive            disable spinners and prompts\n  -V, --version                output the version number\n  -h, --help                   display help for command\n\nCommands:\n  login [options]              Store an API key for this device\n  logout [options]             Remove stored credentials for a profile\n  instance                     Manage GPU instances\n  volume                       Manage network storage volumes\n  pricing                      Browse compute and storage prices\n  gpu                          List the GPU models you can run on\n  billing                      Show balance and usage history\n  runjob|job                   Run and manage Run Jobs\n  exec [options] [command...]  Run a command on temporary CPU or GPU compute\n  ssh-keys                     Manage your SSH public keys\n  registry-keys                Manage container registry logins for private\n                               images\n  templates                    Save launch settings and launch instances and Run\n                               Jobs from them\n  upgrade [options]            Upgrade featherless-cloud to the latest published\n                               version\n  completion <shell>           Print a shell completion script (bash, zsh)\n  help [command]               display help for command\n",
   "stderr": "",
   "exit": 0
  },

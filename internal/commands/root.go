@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/pflag"
 
 	"featherless.ai/featherless-cloud/internal/commands/billing"
+	"featherless.ai/featherless-cloud/internal/commands/gpu"
 	"featherless.ai/featherless-cloud/internal/commands/instance"
 	"featherless.ai/featherless-cloud/internal/commands/job"
 	"featherless.ai/featherless-cloud/internal/commands/pricing"
@@ -58,6 +59,7 @@ func NewRoot() *cobra.Command {
 		instance.Command(),
 		volume.Command(),
 		pricing.Command(),
+		gpu.Command(),
 		billing.Command(),
 		job.Command(),
 		newExecCommand(),
