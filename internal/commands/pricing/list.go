@@ -37,15 +37,9 @@ func rateRow(rate api.PriceRate) []string {
 		}
 	}
 
-	compareAt := "-"
-
-	if rate.CompareAtUnitPriceMicros != nil && *rate.CompareAtUnitPriceMicros != "" {
-		compareAt = version.FormatDollars(*rate.CompareAtUnitPriceMicros)
-	}
-
 	price := version.FormatDollars(rate.UnitPriceMicros) + unitLabels[rate.Unit]
 
-	return []string{rate.DisplayName, gpus, cpus, memory, gpuMemory, price, compareAt}
+	return []string{rate.DisplayName, gpus, cpus, memory, gpuMemory, price}
 }
 
 func newListCommand() *cobra.Command {
@@ -82,7 +76,7 @@ func newListCommand() *cobra.Command {
 					}
 				}
 
-				header := []string{"OFFER", "GPUS", "vCPU", "RAM(GiB)", "GPU-MEM(GiB)", "PRICE", "COMPARE AT"}
+				header := []string{"COMPUTE", "GPUS", "vCPU", "RAM(GiB)", "GPU-MEM(GiB)", "PRICE"}
 				footer := ""
 
 				if !opts.all {
