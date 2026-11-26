@@ -17,6 +17,7 @@ import (
 	"featherless.ai/featherless-cloud/internal/completion"
 	"featherless.ai/featherless-cloud/internal/errs"
 	"featherless.ai/featherless-cloud/internal/output"
+	"featherless.ai/featherless-cloud/internal/project"
 )
 
 const (
@@ -47,6 +48,7 @@ type execOptions struct {
 	detach            bool
 	cancelOnInterrupt bool
 	profile           string
+	project           shared.ProjectOptions
 }
 
 func boundedInteger(value, label string, low, high int) (int, error) {
@@ -455,6 +457,10 @@ func execBody(cmd *cobra.Command, ctx *output.Context, command []string, opts *e
 }
 
 func runExec(cmd *cobra.Command, command []string, opts *execOptions) error {
+	if err := shared.ApplyProject(cmd, opts.project, project.BlockRunJob); err != nil {
+		return err
+	}
+
 	if opts.cpuCores != "" && (opts.gpuCount != "" || opts.gpuType != "") {
 		return errs.New("--cpu-cores cannot be combined with GPU options.")
 	}
@@ -575,6 +581,7 @@ func newExecCommand() *cobra.Command {
 	shared.Switch(cmd, &opts.cancelOnInterrupt, "--cancel-on-interrupt", "cancel instead of detach when Ctrl-C is pressed")
 	shared.Option(cmd, &opts.profile, "--profile <name>", "", "authentication profile to use")
 	completion.Flag(cmd, "profile", shared.Profiles)
+	shared.ProjectFlags(cmd, &opts.project)
 	shared.HelpAfter(cmd, "\nExamples:\n  featherless-cloud exec --gpu-count 1 -- python -c 'import torch; print(torch.cuda.is_available())'\n  featherless-cloud exec --cpu-cores 32 -- python -c 'import os; print(os.cpu_count())'")
 
 	return cmd

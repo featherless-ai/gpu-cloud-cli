@@ -590,7 +590,7 @@ func TestResolveVolumeMatchesExactNamesAndUniqueSubstrings(t *testing.T) {
 
 func TestResolveVolumeErrorsOnUnknownReferences(t *testing.T) {
 	_, err := ResolveVolume([]api.NetworkVolume{volumeFixture()}, "missing")
-	wantError(t, err, `No network volume matching "missing". Run featherless-cloud volume ls.`)
+	wantError(t, err, `No network volume matching "missing". List them with featherless-cloud volume ls, or create one with featherless-cloud volume create.`)
 }
 
 func TestResolveVolumeRefusesVolumesThatAreNotAttachable(t *testing.T) {
