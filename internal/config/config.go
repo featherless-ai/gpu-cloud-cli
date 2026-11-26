@@ -236,20 +236,22 @@ func Load() (*Config, error) {
 	return cfg, nil
 }
 
+// isValidProfile accepts a profile with a key. apiBase is optional: a profile
+// without one, or with an empty one, uses APIBaseURL().
 func isValidProfile(entry *yaml.Node) bool {
 	if entry.Kind != yaml.MappingNode {
 		return false
 	}
 
-	for _, key := range []string{"apiBase", "apiKey"} {
-		value := mappingValue(entry, key)
+	key := mappingValue(entry, "apiKey")
 
-		if value == nil || value.Kind != yaml.ScalarNode || value.Tag != "!!str" {
-			return false
-		}
+	if key == nil || key.Kind != yaml.ScalarNode || key.Tag != "!!str" {
+		return false
 	}
 
-	return true
+	base := mappingValue(entry, "apiBase")
+
+	return base == nil || (base.Kind == yaml.ScalarNode && base.Tag == "!!str")
 }
 
 func mappingValue(node *yaml.Node, key string) *yaml.Node {
@@ -303,7 +305,7 @@ func ResolveAuth(profileFlag string) (ResolvedAuth, error) {
 			return ResolvedAuth{}, errs.Newf("No profile named \"%s\". Run featherless-cloud login --profile %s first.", profileFlag, profileFlag)
 		}
 
-		return ResolvedAuth{APIBase: profile.APIBase, APIKey: profile.APIKey, Profile: profileFlag}, nil
+		return ResolvedAuth{APIBase: profileAPIBase(profile), APIKey: profile.APIKey, Profile: profileFlag}, nil
 	}
 
 	if cfg.CurrentProfile == "" {
@@ -321,7 +323,17 @@ func ResolveAuth(profileFlag string) (ResolvedAuth, error) {
 		return ResolvedAuth{}, errs.Newf("No profile named \"%s\". Run featherless-cloud login first.", cfg.CurrentProfile)
 	}
 
-	return ResolvedAuth{APIBase: profile.APIBase, APIKey: profile.APIKey, Profile: cfg.CurrentProfile}, nil
+	return ResolvedAuth{APIBase: profileAPIBase(profile), APIKey: profile.APIKey, Profile: cfg.CurrentProfile}, nil
+}
+
+// profileAPIBase is the API host a profile talks to: its own apiBase, or the
+// built-in one when the profile leaves it out.
+func profileAPIBase(profile Profile) string {
+	if profile.APIBase != "" {
+		return profile.APIBase
+	}
+
+	return APIBaseURL()
 }
 
 // InstanceKey returns the API key the platform gives a running instance, if

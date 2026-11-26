@@ -81,7 +81,7 @@ func TestLoadRejectsMalformedYAMLWithExactMessage(t *testing.T) {
 	}
 }
 
-func TestLoadRejectsEntriesMissingAPIBaseOrAPIKey(t *testing.T) {
+func TestLoadRejectsProfilesWithoutAnAPIKey(t *testing.T) {
 	isolateHome(t)
 	file := FilePath()
 
@@ -96,6 +96,82 @@ func TestLoadRejectsEntriesMissingAPIBaseOrAPIKey(t *testing.T) {
 
 	if _, err := Load(); err == nil || !errs.IsCLI(err) {
 		t.Errorf("got %v, want a CLI error", err)
+	}
+}
+
+// writeProfile stores one profile with the given body, as hand-edited.
+func writeProfile(t *testing.T, profileBody string) {
+	t.Helper()
+	file := FilePath()
+
+	if err := os.MkdirAll(filepath.Dir(file), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	body := "version: 1\ncurrentProfile: work\nprofiles:\n  work:\n" + profileBody
+
+	if err := os.WriteFile(file, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProfileWithoutAPIBaseUsesTheDefaultHost(t *testing.T) {
+	isolateHome(t)
+	t.Setenv("FEATHERLESS_CLOUD_API_URL", "")
+	writeProfile(t, "    apiKey: flkey_test\n")
+
+	auth, err := ResolveAuth("")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if auth.APIBase != "https://api.cloud.featherless.ai" {
+		t.Errorf("apiBase = %q, want the built-in host", auth.APIBase)
+	}
+}
+
+func TestProfileWithoutAPIBaseFollowsTheEnvironment(t *testing.T) {
+	isolateHome(t)
+	t.Setenv("FEATHERLESS_CLOUD_API_URL", "https://api.example.test")
+	writeProfile(t, "    apiKey: flkey_test\n")
+
+	auth, err := ResolveAuth("work")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if auth.APIBase != "https://api.example.test" {
+		t.Errorf("apiBase = %q, want the environment's host", auth.APIBase)
+	}
+}
+
+func TestStoredAPIBaseWins(t *testing.T) {
+	isolateHome(t)
+	t.Setenv("FEATHERLESS_CLOUD_API_URL", "https://api.example.test")
+	writeProfile(t, "    apiBase: https://api.staging.cloud.featherless.ai\n    apiKey: flkey_test\n")
+
+	auth, err := ResolveAuth("work")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if auth.APIBase != "https://api.staging.cloud.featherless.ai" {
+		t.Errorf("apiBase = %q, want the profile's own host", auth.APIBase)
+	}
+}
+
+func TestEmptyAPIBaseFallsBack(t *testing.T) {
+	isolateHome(t)
+	t.Setenv("FEATHERLESS_CLOUD_API_URL", "")
+	writeProfile(t, "    apiBase: \"\"\n    apiKey: flkey_test\n")
+
+	auth, err := ResolveAuth("work")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if auth.APIBase != "https://api.cloud.featherless.ai" {
+		t.Errorf("apiBase = %q, want the built-in host", auth.APIBase)
 	}
 }
 
