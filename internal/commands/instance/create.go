@@ -10,6 +10,7 @@ import (
 	"featherless.ai/featherless-cloud/internal/completion"
 	"featherless.ai/featherless-cloud/internal/errs"
 	"featherless.ai/featherless-cloud/internal/output"
+	"featherless.ai/featherless-cloud/internal/project"
 )
 
 type createOptions struct {
@@ -30,6 +31,7 @@ type createOptions struct {
 	secret          []string
 	port            []string
 	profile         string
+	project         shared.ProjectOptions
 }
 
 // changed is the flag's value when it was typed, else nil.
@@ -115,6 +117,10 @@ func variables(values []string, label string) ([]api.EnvVar, error) {
 }
 
 func createInstance(cmd *cobra.Command, opts *createOptions) error {
+	if err := shared.ApplyProject(cmd, opts.project, project.BlockInstance); err != nil {
+		return err
+	}
+
 	ctx := shared.NewContext(cmd)
 
 	client, err := shared.Client(opts.profile)
@@ -313,6 +319,7 @@ func newCreateCommand() *cobra.Command {
 	shared.Repeatable(cmd, &opts.port, "--port <port>", "serve this port at a public HTTPS address, repeatable")
 	shared.Option(cmd, &opts.profile, "--profile <name>", "", "profile to use")
 	completion.Flag(cmd, "profile", shared.Profiles)
+	shared.ProjectFlags(cmd, &opts.project)
 	shared.HelpAfter(cmd, "\nCreation is retry-safe: re-running the same command within the\nidempotency window returns the original instance.")
 
 	return cmd

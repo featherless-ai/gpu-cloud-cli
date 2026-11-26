@@ -1067,7 +1067,7 @@ func FindVolume(volumes []api.NetworkVolume, ref string) (api.NetworkVolume, err
 		return partial[0], nil
 	}
 
-	return api.NetworkVolume{}, errs.Newf("No network volume matching \"%s\". Run featherless-cloud volume ls.", ref)
+	return api.NetworkVolume{}, errs.Newf("No network volume matching \"%s\". List them with featherless-cloud volume ls, or create one with featherless-cloud volume create.", ref)
 }
 
 // ResolveVolume returns the id of an attachable (available or in use) volume.

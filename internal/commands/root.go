@@ -14,6 +14,7 @@ import (
 	"featherless.ai/featherless-cloud/internal/commands/instance"
 	"featherless.ai/featherless-cloud/internal/commands/job"
 	"featherless.ai/featherless-cloud/internal/commands/pricing"
+	"featherless.ai/featherless-cloud/internal/commands/projectinit"
 	"featherless.ai/featherless-cloud/internal/commands/registrykeys"
 	"featherless.ai/featherless-cloud/internal/commands/shared"
 	"featherless.ai/featherless-cloud/internal/commands/sshkeys"
@@ -64,6 +65,7 @@ func NewRoot() *cobra.Command {
 		sshkeys.Command(),
 		registrykeys.Command(),
 		templates.Command(),
+		projectinit.InitCommand(),
 		newUpgradeCommand(),
 		newCompletionCommand(),
 		newCompleteCommand(),

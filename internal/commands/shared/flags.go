@@ -2,6 +2,7 @@ package shared
 
 import (
 	"encoding/json"
+	"slices"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -209,3 +210,18 @@ func (v *listValue) Set(value string) error {
 }
 
 func (v *listValue) Type() string { return v.placeholder }
+
+// Append, Replace and GetSlice make the flag a pflag.SliceValue, so a command
+// can merge the project file's entries in front of the values typed.
+
+func (v *listValue) Append(value string) error {
+	*v.target = append(*v.target, value)
+	return nil
+}
+
+func (v *listValue) Replace(values []string) error {
+	*v.target = slices.Clone(values)
+	return nil
+}
+
+func (v *listValue) GetSlice() []string { return *v.target }

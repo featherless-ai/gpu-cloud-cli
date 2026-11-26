@@ -3,6 +3,7 @@ module featherless.ai/featherless-cloud
 go 1.27
 
 require (
+	github.com/BurntSushi/toml v1.6.0
 	github.com/charmbracelet/bubbletea v1.3.6
 	github.com/charmbracelet/huh v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.0
